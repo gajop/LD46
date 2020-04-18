@@ -7,7 +7,7 @@ Core:
 - Display population: DONE
 - Add lose conditions: DONE
 - Add restart: DONE
-- Add meteor destruction
+- Add meteor destruction: DONE
 - Add pew pew beam
 - Add menu and allow restart
 - Win condition: when we reach some time and humanity "develops" to stand on its own?
