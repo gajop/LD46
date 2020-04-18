@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use rand::prelude::*;
 
 use ggez::conf;
@@ -11,7 +13,7 @@ use rand::{
 };
 
 const SCREEN_SIZE_X: f32 = 1000.0;
-const SCREEN_SIZE_Y: f32 = 720.0;
+const SCREEN_SIZE_Y: f32 = 1000.0;
 
 fn main() {
     // Make a Context.
@@ -37,8 +39,7 @@ fn main() {
 struct GameObject {
     pos_x: f32,
     pos_y: f32,
-    size_x: f32,
-    size_y: f32,
+    radius: f32,
     vel_x: f32,
     vel_y: f32,
     acc_x: f32,
@@ -71,8 +72,7 @@ fn add_spaceship(game: &mut SaveThePinkSkin) {
     game.objects.push(GameObject {
         pos_x: 0.1,
         pos_y: 0.3,
-        size_x: 0.01,
-        size_y: 0.01,
+        radius: 0.01,
         color: graphics::Color::new(0.5, 0.5, 0.7, 1.0),
         vel_x: 0.0,
         vel_y: 0.0,
@@ -86,8 +86,7 @@ fn add_earth(game: &mut SaveThePinkSkin) {
     game.objects.push(GameObject {
         pos_x: 0.5,
         pos_y: 0.5,
-        size_x: 0.1,
-        size_y: 0.1,
+        radius: 0.1,
         color: graphics::Color::new(0.3, 0.7, 0.3, 1.0),
         vel_x: 0.0,
         vel_y: 0.0,
@@ -98,7 +97,9 @@ fn add_earth(game: &mut SaveThePinkSkin) {
 }
 
 fn dist(first: &GameObject, second: &GameObject) -> f32 {
-    return 0.0;
+    let dx = first.pos_x - second.pos_x;
+    let dy = first.pos_y - second.pos_y;
+    return (dx * dx + dy * dy).sqrt() - first.radius - second.radius;
 }
 
 fn add_meteor(game: &mut SaveThePinkSkin) {
@@ -110,8 +111,7 @@ fn add_meteor(game: &mut SaveThePinkSkin) {
     let mut meteor = GameObject {
         pos_x: 0.0,
         pos_y: 0.0,
-        size_x: 0.0,
-        size_y: 0.0,
+        radius: 0.0,
         color: graphics::Color::new(0.878, 0.603, 0.282, 1.0),
         vel_x: 0.0,
         vel_y: 0.0,
@@ -119,8 +119,7 @@ fn add_meteor(game: &mut SaveThePinkSkin) {
         acc_y: 0.0,
     };
 
-    meteor.size_x = game.rng.gen_range(MIN_SIZE, MAX_SIZE);
-    meteor.size_y = game.rng.gen_range(MIN_SIZE, MAX_SIZE);
+    meteor.radius = game.rng.gen_range(MIN_SIZE, MAX_SIZE);
     meteor.vel_x = game.rng.gen_range(MIN_VELOCITY, MAX_VELOCITY);
     meteor.vel_y = game.rng.gen_range(MIN_VELOCITY, MAX_VELOCITY);
 
@@ -205,6 +204,83 @@ fn from_keycode(key: KeyCode) -> Option<Direction> {
     }
 }
 
+struct Collision {
+    first: usize,
+    second: usize,
+}
+
+fn find_collisions(game: &SaveThePinkSkin) -> Vec<Collision> {
+    let mut collisions = Vec::<Collision>::new();
+    for i in 0..game.objects.len() - 1 {
+        for j in (i + 1)..game.objects.len() {
+            let object1 = &game.objects[i];
+            let object2 = &game.objects[j];
+            if dist(object1, object2) <= 0.0 {
+                collisions.push(Collision {
+                    first: i,
+                    second: j,
+                });
+                // println!("earth colided with meteor: {}", i);
+            }
+        }
+    }
+
+    collisions
+}
+
+struct CollisionResults {
+    created: Vec<GameObject>,
+    destroyed_ids: Vec<usize>,
+}
+
+fn process_collisions(game: &mut SaveThePinkSkin, collisions: &Vec<Collision>) -> CollisionResults {
+    let mut results = CollisionResults {
+        created: Vec::new(),
+        destroyed_ids: Vec::new(),
+    };
+    let mut destroyed_unique = HashSet::<usize>::new();
+
+    for collision in collisions {
+        destroyed_unique.insert(collision.first);
+        destroyed_unique.insert(collision.second);
+        if let Some(earth_id) = game.earth_id {
+            if earth_id == collision.first || earth_id == collision.second {
+                // println!("collided with earth");
+            }
+        }
+        if let Some(spaceship_id) = game.spaceship_id {
+            if spaceship_id == collision.first || spaceship_id == collision.second {
+                // println!("collided with spaceship");
+            }
+        }
+    }
+    for destroyed in destroyed_unique {
+        if destroyed >= 2 {
+            results.destroyed_ids.push(destroyed);
+        }
+    }
+
+    results
+}
+
+fn cleanup_destroyed(game: &mut SaveThePinkSkin, destroyed_ids: &Vec<usize>) {
+    if game.objects.is_empty() {
+        return;
+    }
+    let mut index: usize = 0;
+    game.objects.retain(|_| {
+        let retain = !destroyed_ids.contains(&index);
+        index += 1;
+        retain
+    })
+}
+
+fn add_new(game: &mut SaveThePinkSkin, created: Vec<GameObject>) {
+    for object in created {
+        game.objects.push(object);
+    }
+}
+
 impl EventHandler for SaveThePinkSkin {
     fn update(&mut self, ctx: &mut Context) -> GameResult<()> {
         const TARGET_FPS: u32 = 60;
@@ -253,14 +329,38 @@ impl EventHandler for SaveThePinkSkin {
                 object.pos_x += object.vel_x;
                 object.pos_y += object.vel_y;
 
-                if object.pos_x - object.size_x > 1.0 {
+                if object.pos_x - object.radius > 1.0 {
                     object.pos_x = 0.0;
-                } else if object.pos_x + object.size_x < 0.0 {
+                } else if object.pos_x + object.radius < 0.0 {
                     object.pos_x = 1.0;
                 }
-                if object.pos_y - object.size_y > 1.0 {
+                if object.pos_y - object.radius > 1.0 {
                     object.pos_y = 0.0;
-                } else if object.pos_y + object.size_y < 0.0 {
+                } else if object.pos_y + object.radius < 0.0 {
+                    object.pos_y = 1.0;
+                }
+            }
+
+            let collisions = find_collisions(self);
+            let results = process_collisions(self, &collisions);
+            cleanup_destroyed(self, &results.destroyed_ids);
+            add_new(self, results.created);
+
+            for object in &mut self.objects {
+                object.vel_x += object.acc_x;
+                object.vel_y += object.acc_y;
+
+                object.pos_x += object.vel_x;
+                object.pos_y += object.vel_y;
+
+                if object.pos_x - object.radius > 1.0 {
+                    object.pos_x = 0.0;
+                } else if object.pos_x + object.radius < 0.0 {
+                    object.pos_x = 1.0;
+                }
+                if object.pos_y - object.radius > 1.0 {
+                    object.pos_y = 0.0;
+                } else if object.pos_y + object.radius < 0.0 {
                     object.pos_y = 1.0;
                 }
             }
@@ -278,7 +378,7 @@ impl EventHandler for SaveThePinkSkin {
                 ctx,
                 graphics::DrawMode::fill(),
                 na::Point2::new(0.0, 0.0),
-                object.size_x * SCREEN_SIZE_X,
+                object.radius * SCREEN_SIZE_X,
                 0.1,
                 object.color,
             )?;
