@@ -1,0 +1,38 @@
+Keep it alive, it's fragile
+	- Something immobile that's being attacked
+	- Idea: Planet Earth being bombarded by meteors/comets and aliens saving it with tractor beams
+		- Seems easy to make fun
+		- Seems easy to do art for
+		- Probably doable in a day with extra time for polish
+		- PICKED: I'm new to Rust/ggez and want to finish something.
+	- Something weak and moving, easily killed by monsters or obstacles
+Keep it alive, although you shouldn't
+	- A comedic take
+	- Idea: Keep the pest alive while farmers are trying to get rid of it
+Keep the hive organism alive
+	- Ants, bees, etc.
+	- Perhaps interesting as an RTS or God-sim game :)
+Keep the lemming(s) alive
+	- Idea: Help a creature in a maze
+		- Imagine a hamster :)
+		- It moves through the maze in a predetermined way (arrows on floor?)
+		- Make sure it doesn't go to dangerous locations by doing some actions, e.g. change some arrows (limited actions)
+		- Easy to make fun
+		- A bit of work to code & design different levels
+		- Not that much work to do art
+	- Idea: Lemmings copy
+		- Well it's a copy.. so no
+		- Also levels will probably be hard to make
+Keep it alive while modifying what it does
+	- Inspired by lemmings. How about we modify what the thing we're protecting does?
+	- It's mostly autonomous but we can control it to a point, and what we do is impactful
+Keep the ecosystem alive
+	- Basically, Keep the balance alive
+	- Idea: Balance the food chain
+		- Dragging and dropping creatures around "potential" food?
+		- Dragging near other similar species for reproduction?
+		- Saving the few remaining ones?
+		- Seems fun to implement, but hard to make fun. Also lots of creature drawing & animation which I'm bad at :)
+		- PS: I'd like to make a proper environment sim one day and Rust seems like a good idea for that with all the "Data Driven" engines :)
+Keep the movement alive
+	- How would I make this into a game?

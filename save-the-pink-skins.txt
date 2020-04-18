@@ -1,0 +1,21 @@
+Idea: Planet Earth being bombarded by meteors/comets and aliens saving it with tractor beams
+- Seems easy to make fun
+- Seems easy to do art for
+- Probably doable in a day with extra time for polish
+- PICKED: I'm new to Rust/ggez and want to finish something.
+
+Game:
+- Name: Save the Pink Skins
+- Description:
+- Mandatory mechanics:
+	- Core loop: Move around in your spaceship and save earth from meteors by dragging them away with a tractor beam
+	- Meteors spawn continously and some of them go towards Earth. Different size & speed
+	- Basic physics (gravity, speed, acceleration)
+	- Tractor beam mechanics
+- Optional mechanics:
+	- Population (allow ocassional failure): Each meteor hit will cause a population hit depending on speed and size
+	- Overpopulation is bad so kill the pink skins from time to time
+	- Meteor collisions break the meteor
+	- Atmosphere burn for small meteors
+	- Multiple planets
+- Controls: WASD to move. Mouse move to direct tractor beam, LMB to toggle activate
