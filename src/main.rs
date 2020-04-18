@@ -131,6 +131,12 @@ impl SaveThePinkSkin {
         // Load/create resources such as images here.
         let font = graphics::Font::new(ctx, "/PixelEmulator-xq08.ttf")?;
 
+        let game = SaveThePinkSkin::init(font);
+
+        Ok(game)
+    }
+
+    fn init(font: graphics::Font) -> SaveThePinkSkin {
         let mut game = SaveThePinkSkin {
             id_generator: 0,
             objects: HashMap::new(),
@@ -151,7 +157,11 @@ impl SaveThePinkSkin {
         game.add_text_population();
         game.add_text_spaceship_hp();
 
-        Ok(game)
+        game
+    }
+
+    fn restart(&mut self) {
+        *self = SaveThePinkSkin::init(self.font);
     }
 
     fn make_object(
@@ -269,6 +279,7 @@ impl SaveThePinkSkin {
             Some(GameVictoryResult::Victory) => "Nursery finished.",
             None => "Well that didn't work",
         };
+        let end_text_full = format!("{}\n{}", end_text, "R to Restart");
         let id = self.make_object(
             Transform {
                 pos_x: 0.35,
@@ -281,7 +292,7 @@ impl SaveThePinkSkin {
             Shape::Text,
             None,
             Some(TextData {
-                text: graphics::Text::new((end_text, self.font, 34.0)),
+                text: graphics::Text::new((end_text_full, self.font, 34.0)),
                 expiration_time: None,
                 font_size: 34.0,
             }),
@@ -688,6 +699,9 @@ impl EventHandler for SaveThePinkSkin {
                 Direction::Up | Direction::Down => self.controls.up_down = Some(dir),
                 Direction::Left | Direction::Right => self.controls.left_right = Some(dir),
             }
+        }
+        if keycode == KeyCode::R && self.victory_result.is_some() {
+            self.restart();
         }
     }
 
