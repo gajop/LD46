@@ -1,7 +1,14 @@
+use rand::prelude::*;
+
 use ggez::conf;
 use ggez::event::{self, EventHandler, KeyCode, KeyMods};
 use ggez::nalgebra as na;
 use ggez::{graphics, Context, ContextBuilder, GameResult};
+
+use rand::{
+    distributions::{Distribution, Standard},
+    Rng,
+};
 
 const SCREEN_SIZE_X: f32 = 1000.0;
 const SCREEN_SIZE_Y: f32 = 720.0;
@@ -17,34 +24,8 @@ fn main() {
     // Usually, you should provide it with the Context object to
     // use when setting your game up.
     let mut my_game = SaveThePinkSkin::new(&mut ctx);
-    add_spaceship(
-        &mut my_game,
-        GameObject {
-            pos_x: 0.1,
-            pos_y: 0.3,
-            size_x: 0.01,
-            size_y: 0.01,
-            color: graphics::Color::new(0.5, 0.5, 0.7, 1.0),
-            vel_x: 0.0,
-            vel_y: 0.0,
-            acc_x: 0.0,
-            acc_y: 0.0,
-        },
-    );
-    add_earth(
-        &mut my_game,
-        GameObject {
-            pos_x: 0.5,
-            pos_y: 0.5,
-            size_x: 0.1,
-            size_y: 0.1,
-            color: graphics::Color::new(0.3, 0.7, 0.3, 1.0),
-            vel_x: 0.0,
-            vel_y: 0.0,
-            acc_x: 0.0,
-            acc_y: 0.0,
-        },
-    );
+    add_spaceship(&mut my_game);
+    add_earth(&mut my_game);
 
     // Run!
     match event::run(&mut ctx, &mut event_loop, &mut my_game) {
@@ -82,16 +63,103 @@ struct SaveThePinkSkin {
     spaceship_id: Option<usize>,
     earth_id: Option<usize>,
     controls: Controls,
+    rng: ThreadRng,
+    next_meteor_spawn: Option<f32>,
 }
 
-fn add_spaceship(game: &mut SaveThePinkSkin, game_object: GameObject) {
-    game.objects.push(game_object);
+fn add_spaceship(game: &mut SaveThePinkSkin) {
+    game.objects.push(GameObject {
+        pos_x: 0.1,
+        pos_y: 0.3,
+        size_x: 0.01,
+        size_y: 0.01,
+        color: graphics::Color::new(0.5, 0.5, 0.7, 1.0),
+        vel_x: 0.0,
+        vel_y: 0.0,
+        acc_x: 0.0,
+        acc_y: 0.0,
+    });
     game.spaceship_id = Some(game.objects.len() - 1);
 }
 
-fn add_earth(game: &mut SaveThePinkSkin, game_object: GameObject) {
-    game.objects.push(game_object);
+fn add_earth(game: &mut SaveThePinkSkin) {
+    game.objects.push(GameObject {
+        pos_x: 0.5,
+        pos_y: 0.5,
+        size_x: 0.1,
+        size_y: 0.1,
+        color: graphics::Color::new(0.3, 0.7, 0.3, 1.0),
+        vel_x: 0.0,
+        vel_y: 0.0,
+        acc_x: 0.0,
+        acc_y: 0.0,
+    });
     game.earth_id = Some(game.objects.len() - 1);
+}
+
+fn dist(first: &GameObject, second: &GameObject) -> f32 {
+    return 0.0;
+}
+
+fn add_meteor(game: &mut SaveThePinkSkin) {
+    const MAX_SIZE: f32 = 0.02;
+    const MIN_SIZE: f32 = 0.007;
+    const MAX_VELOCITY: f32 = 0.001;
+    const MIN_VELOCITY: f32 = 0.0003;
+
+    let mut meteor = GameObject {
+        pos_x: 0.0,
+        pos_y: 0.0,
+        size_x: 0.0,
+        size_y: 0.0,
+        color: graphics::Color::new(0.878, 0.603, 0.282, 1.0),
+        vel_x: 0.0,
+        vel_y: 0.0,
+        acc_x: 0.0,
+        acc_y: 0.0,
+    };
+
+    meteor.size_x = game.rng.gen_range(MIN_SIZE, MAX_SIZE);
+    meteor.size_y = game.rng.gen_range(MIN_SIZE, MAX_SIZE);
+    meteor.vel_x = game.rng.gen_range(MIN_VELOCITY, MAX_VELOCITY);
+    meteor.vel_y = game.rng.gen_range(MIN_VELOCITY, MAX_VELOCITY);
+
+    let dir: Direction = rand::random();
+    let pos: f32 = game.rng.gen();
+
+    match dir {
+        Direction::Up => {
+            meteor.pos_x = pos;
+            meteor.pos_y = 0.0;
+            if game.rng.gen::<f32>() > 0.5 {
+                meteor.vel_x *= -1.0;
+            }
+        }
+        Direction::Down => {
+            meteor.pos_x = pos;
+            meteor.pos_y = 1.0;
+            meteor.vel_y *= -1.0;
+            if game.rng.gen::<f32>() > 0.5 {
+                meteor.vel_x *= -1.0;
+            }
+        }
+        Direction::Left => {
+            meteor.pos_x = 0.0;
+            meteor.pos_y = pos;
+            if game.rng.gen::<f32>() > 0.5 {
+                meteor.vel_y *= -1.0;
+            }
+        }
+        Direction::Right => {
+            meteor.pos_x = 1.0;
+            meteor.pos_y = pos;
+            meteor.vel_x *= -1.0;
+            if game.rng.gen::<f32>() > 0.5 {
+                meteor.vel_y *= -1.0;
+            }
+        }
+    };
+    game.objects.push(meteor);
 }
 
 impl SaveThePinkSkin {
@@ -102,6 +170,8 @@ impl SaveThePinkSkin {
             controls: Default::default(),
             spaceship_id: None,
             earth_id: None,
+            rng: rand::thread_rng(),
+            next_meteor_spawn: None,
         }
     }
 }
@@ -112,6 +182,17 @@ enum Direction {
     Down,
     Left,
     Right,
+}
+
+impl Distribution<Direction> for Standard {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Direction {
+        match rng.gen_range(0, 4) {
+            0 => Direction::Up,
+            1 => Direction::Down,
+            2 => Direction::Left,
+            _ => Direction::Right,
+        }
+    }
 }
 
 fn from_keycode(key: KeyCode) -> Option<Direction> {
@@ -127,6 +208,18 @@ fn from_keycode(key: KeyCode) -> Option<Direction> {
 impl EventHandler for SaveThePinkSkin {
     fn update(&mut self, ctx: &mut Context) -> GameResult<()> {
         const TARGET_FPS: u32 = 60;
+        const SPAWN_INTERVAL: f32 = 1.0;
+
+        let time: f32 = ggez::timer::time_since_start(&ctx).as_secs() as f32;
+
+        if let Some(next_meteor_spawn) = self.next_meteor_spawn {
+            if time > next_meteor_spawn {
+                add_meteor(self);
+                self.next_meteor_spawn = Some(time + SPAWN_INTERVAL);
+            }
+        } else {
+            self.next_meteor_spawn = Some(time + SPAWN_INTERVAL);
+        }
 
         while ggez::timer::check_update_time(ctx, TARGET_FPS) {
             if let Some(spaceship_id) = self.spaceship_id {

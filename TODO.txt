@@ -1,8 +1,8 @@
 Core:
 - Setup ggez: DONE
 - Render an Earth circle and a spaceship circle: DONE
-- Make the spaceship controllable with WASD
-- Spawn meteors
+- Make the spaceship controllable with WASD: DONE
+- Spawn meteors: DONE
 - Add physics
 - Make a tractor beam for the spaceship to control meteors
 - Add collisions and destruction
