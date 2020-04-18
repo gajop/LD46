@@ -6,7 +6,7 @@ use std::path;
 use rand::prelude::*;
 
 use ggez::conf;
-use ggez::event::{self, EventHandler, KeyCode, KeyMods};
+use ggez::event::{self, EventHandler, KeyCode, KeyMods, MouseButton};
 use ggez::nalgebra as na;
 use ggez::{graphics, Context, ContextBuilder, GameResult};
 
@@ -93,15 +93,26 @@ struct TextData {
     font_size: f32,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+enum ObjType {
+    Ship,
+    Earth,
+    Meteor,
+    Projectile,
+    UI,
+}
+
 #[derive(Clone, Debug)]
 struct GameObject {
     id: usize,
     transform: Transform,
 
     // FIXME: there must be a better way...
+    object_type: ObjType,
     shape: Shape,
     circle_data: Option<CircleData>,
     text_data: Option<TextData>,
+    ttl: Option<f32>,
 
     collidable: bool,
 }
@@ -171,20 +182,28 @@ impl SaveThePinkSkin {
     fn make_object(
         &mut self,
         transform: Transform,
+        object_type: ObjType,
         shape: Shape,
         circle_data: Option<CircleData>,
         text_data: Option<TextData>,
     ) -> usize {
         self.id_generator += 1;
         let id = self.id_generator;
+        let ttl = if object_type == ObjType::Projectile {
+            Some(50.0)
+        } else {
+            None
+        };
         self.objects.insert(
             id,
             GameObject {
                 id,
                 transform,
                 shape,
+                object_type,
                 circle_data: circle_data,
                 text_data: text_data,
+                ttl,
                 collidable: true,
             },
         );
@@ -202,6 +221,7 @@ impl SaveThePinkSkin {
                 acc_x: 0.0,
                 acc_y: 0.0,
             },
+            ObjType::Ship,
             Shape::Circle,
             Some(CircleData {
                 radius: 0.01,
@@ -222,6 +242,7 @@ impl SaveThePinkSkin {
                 acc_x: 0.0,
                 acc_y: 0.0,
             },
+            ObjType::Earth,
             Shape::Circle,
             Some(CircleData {
                 radius: 0.1,
@@ -242,6 +263,7 @@ impl SaveThePinkSkin {
                 acc_x: 0.0,
                 acc_y: 0.0,
             },
+            ObjType::UI,
             Shape::Text,
             None,
             Some(TextData {
@@ -264,6 +286,7 @@ impl SaveThePinkSkin {
                 acc_x: 0.0,
                 acc_y: 0.0,
             },
+            ObjType::UI,
             Shape::Text,
             None,
             Some(TextData {
@@ -294,6 +317,7 @@ impl SaveThePinkSkin {
                 acc_x: 0.0,
                 acc_y: 0.0,
             },
+            ObjType::UI,
             Shape::Text,
             None,
             Some(TextData {
@@ -361,6 +385,7 @@ impl SaveThePinkSkin {
     fn add_meteor(&mut self, transform: Transform, radius: f32) {
         self.make_object(
             transform,
+            ObjType::Meteor,
             Shape::Circle,
             Some(CircleData {
                 radius: radius,
@@ -378,6 +403,38 @@ impl SaveThePinkSkin {
         }
         if self.earth_id == Some(id) {
             self.earth_id = None;
+        }
+    }
+
+    fn shoot(&mut self, x: f32, y: f32) {
+        const PROJECTILE_RADIUS: f32 = 0.001;
+        const PROJECTILE_SPEED: f32 = 0.01;
+
+        if let Some(spaceship_id) = self.spaceship_id {
+            let &spaceship = self.objects.get(&spaceship_id).as_ref().unwrap();
+            let pos_x = spaceship.transform.pos_x;
+            let pos_y = spaceship.transform.pos_y;
+            let dx = x - pos_x;
+            let dy = y - pos_y;
+            let d = (dx * dx + dy * dy).sqrt();
+
+            self.make_object(
+                Transform {
+                    pos_x: pos_x,
+                    pos_y: pos_y,
+                    vel_x: PROJECTILE_SPEED * dx / d,
+                    vel_y: PROJECTILE_SPEED * dy / d,
+                    acc_x: 0.0,
+                    acc_y: 0.0,
+                },
+                ObjType::Projectile,
+                Shape::Circle,
+                Some(CircleData {
+                    radius: PROJECTILE_RADIUS,
+                    color: graphics::Color::new(0.7, 0.9, 0.2, 1.0),
+                }),
+                None,
+            );
         }
     }
 
@@ -492,114 +549,133 @@ fn process_collisions(game: &mut SaveThePinkSkin, collisions: &Vec<Collision>) -
     let mut destroyed_unique = HashSet::<usize>::new();
 
     for collision in collisions {
-        if game.spaceship_id == Some(collision.first) || game.spaceship_id == Some(collision.second)
-        {
-            let collider = if Some(collision.first) == game.spaceship_id {
-                collision.second
-            } else {
-                collision.first
-            };
-
-            if game.earth_id == Some(collider) {
+        let first_type = game.get(collision.first).object_type.clone();
+        let second_type = game.get(collision.second).object_type.clone();
+        println!("{:?} x {:?}", first_type, second_type);
+        match (&first_type, &second_type) {
+            (ObjType::Ship, ObjType::Earth) | (ObjType::Earth, ObjType::Ship) => {
                 results.ship_damage = 1000.0;
-            } else {
+            }
+            (ObjType::Ship, ObjType::Meteor) | (ObjType::Meteor, ObjType::Ship) => {
+                let collider = if first_type == ObjType::Meteor {
+                    collision.first
+                } else {
+                    collision.second
+                };
                 results.ship_damage +=
                     game.get(collider).circle_data.as_ref().unwrap().radius * 1000.0;
                 destroyed_unique.insert(collider);
             }
-        } else if game.earth_id == Some(collision.first) || game.earth_id == Some(collision.second)
-        {
-            let collider = if Some(collision.first) == game.earth_id {
-                collision.second
-            } else {
-                collision.first
-            };
-            results.population_damage +=
-                game.get(collider).circle_data.as_ref().unwrap().radius * 1000.0;
-            destroyed_unique.insert(collider);
-        } else {
-            let m1 = game.objects.get(&collision.first).unwrap();
-            let m2 = game.objects.get(&collision.second).unwrap();
-            let t1 = &m1.transform;
-            let t2 = &m2.transform;
-            let r1 = m1.circle_data.as_ref().unwrap().radius;
-            let r2 = m2.circle_data.as_ref().unwrap().radius;
-
-            let dx = t1.pos_x - t2.pos_x;
-            let dy = t1.pos_y - t2.pos_y;
-            let radius_ratio = r1 / (r1 + r2);
-
-            const MAX_GENERATED_VELOCITY: f32 = 0.001;
-
-            let vel_x = gen_safe_range(&mut game.rng, -t1.vel_x, -t1.vel_x / radius_ratio);
-            let vel_y = gen_safe_range(&mut game.rng, -t1.vel_y, -t1.vel_y / radius_ratio);
-            let meteor = MeteorData {
-                transform: Transform {
-                    // pos_x: gen_safe_range(&mut game.rng, t1.pos_x, t1.pos_x + dx),
-                    // pos_y: gen_safe_range(&mut game.rng, t1.pos_y, t1.pos_y + dy),
-                    pos_x: t1.pos_x,
-                    pos_y: t1.pos_y,
-                    vel_x: vel_x.abs().min(MAX_GENERATED_VELOCITY) * vel_y.signum(),
-                    vel_y: vel_y.abs().min(MAX_GENERATED_VELOCITY) * vel_x.signum(),
-                    acc_x: 0.0,
-                    acc_y: 0.0,
-                },
-                radius: r1 * 0.7,
-            };
-            if meteor.radius > METEOR_DESTROY_RADIUS
-                && meteor.transform.pos_x.abs() > 0.01
-                && meteor.transform.pos_x.abs() < 0.99
-                && meteor.transform.pos_y.abs() > 0.01
-                && meteor.transform.pos_y.abs() < 0.99
-            {
-                results.created.push(meteor);
+            (ObjType::Earth, ObjType::Meteor) | (ObjType::Meteor, ObjType::Earth) => {
+                let collider = if first_type == ObjType::Meteor {
+                    collision.first
+                } else {
+                    collision.second
+                };
+                results.population_damage +=
+                    game.get(collider).circle_data.as_ref().unwrap().radius * 1000.0;
+                destroyed_unique.insert(collider);
             }
+            (ObjType::Earth, ObjType::Projectile) => {
+                destroyed_unique.insert(collision.second);
+            }
+            (ObjType::Projectile, ObjType::Earth) => {
+                destroyed_unique.insert(collision.first);
+            }
+            (ObjType::Meteor, ObjType::Projectile) | (ObjType::Projectile, ObjType::Meteor) => {
+                let collider = if first_type == ObjType::Meteor {
+                    collision.first
+                } else {
+                    collision.second
+                };
+                destroyed_unique.insert(collision.first);
+                destroyed_unique.insert(collision.second);
+            }
+            (ObjType::Meteor, ObjType::Meteor) => {
+                let m1 = game.objects.get(&collision.first).unwrap();
+                let m2 = game.objects.get(&collision.second).unwrap();
+                let t1 = &m1.transform;
+                let t2 = &m2.transform;
+                let r1 = m1.circle_data.as_ref().unwrap().radius;
+                let r2 = m2.circle_data.as_ref().unwrap().radius;
 
-            // let meteor = MeteorData {
-            //     transform: Transform {
-            //         pos_x: gen_safe_range(&mut game.rng, t2.pos_x, t2.pos_x - dx),
-            //         pos_y: gen_safe_range(&mut game.rng, t2.pos_y, t2.pos_y - dy),
-            //         vel_x: gen_safe_range(&mut game.rng, -t2.vel_x, -t2.vel_x * radius_ratio),
-            //         vel_y: gen_safe_range(&mut game.rng, -t2.vel_y, -t2.vel_y * radius_ratio),
-            //         acc_x: 0.0,
-            //         acc_y: 0.0,
-            //     },
-            //     radius: r2 * 0.7,
-            // };
-            // results.created.push(meteor);
+                let dx = t1.pos_x - t2.pos_x;
+                let dy = t1.pos_y - t2.pos_y;
+                let radius_ratio = r1 / (r1 + r2);
 
-            // const MIN_SPAWN: u32 = 1;
-            // const MAX_SPAWN: u32 = 3;
-            // let spawn_count: usize = game.rng.gen_range(MIN_SPAWN, MAX_SPAWN) as usize;
+                const MAX_GENERATED_VELOCITY: f32 = 0.001;
 
-            // let total_radius: f32 = (r1 + r2) * 0.3;
-            // let mut radius_weights: Vec<f32> = Vec::new();
-            // for _ in 0..spawn_count {
-            //     radius_weights.push(game.rng.gen());
-            // }
-            // let weight_factor: f32 = total_radius / radius_weights.iter().sum::<f32>();
+                let vel_x = gen_safe_range(&mut game.rng, -t1.vel_x, -t1.vel_x / radius_ratio);
+                let vel_y = gen_safe_range(&mut game.rng, -t1.vel_y, -t1.vel_y / radius_ratio);
+                let meteor = MeteorData {
+                    transform: Transform {
+                        // pos_x: gen_safe_range(&mut game.rng, t1.pos_x, t1.pos_x + dx),
+                        // pos_y: gen_safe_range(&mut game.rng, t1.pos_y, t1.pos_y + dy),
+                        pos_x: t1.pos_x,
+                        pos_y: t1.pos_y,
+                        vel_x: vel_x.abs().min(MAX_GENERATED_VELOCITY) * vel_y.signum(),
+                        vel_y: vel_y.abs().min(MAX_GENERATED_VELOCITY) * vel_x.signum(),
+                        acc_x: 0.0,
+                        acc_y: 0.0,
+                    },
+                    radius: r1 * 0.7,
+                };
+                if meteor.radius > METEOR_DESTROY_RADIUS
+                    && meteor.transform.pos_x.abs() > 0.01
+                    && meteor.transform.pos_x.abs() < 0.99
+                    && meteor.transform.pos_y.abs() > 0.01
+                    && meteor.transform.pos_y.abs() < 0.99
+                {
+                    results.created.push(meteor);
+                }
 
-            // for i in 0..spawn_count {
-            //     let meteor = MeteorData {
-            //         transform: Transform {
-            //             pos_x: gen_safe_range(&mut game.rng, t1.pos_x, t2.pos_x),
-            //             pos_y: gen_safe_range(&mut game.rng, t1.pos_y, t2.pos_y),
-            //             vel_x: gen_safe_range(&mut game.rng, -t1.vel_x, -t2.vel_x),
-            //             vel_y: gen_safe_range(&mut game.rng, -t1.vel_y, -t2.vel_y),
-            //             acc_x: 0.0,
-            //             acc_y: 0.0,
-            //         },
-            //         radius: radius_weights[i] * weight_factor,
-            //     };
-            //     const MIN_RADIUS: f32 = 0.007;
-            //     if meteor.radius > MIN_RADIUS {
-            //         results.created.push(meteor);
-            //     }
-            // }
-            println!("Collision: {} x {}", collision.first, collision.second);
-            destroyed_unique.insert(collision.first);
-            destroyed_unique.insert(collision.second);
-        }
+                // let meteor = MeteorData {
+                //     transform: Transform {
+                //         pos_x: gen_safe_range(&mut game.rng, t2.pos_x, t2.pos_x - dx),
+                //         pos_y: gen_safe_range(&mut game.rng, t2.pos_y, t2.pos_y - dy),
+                //         vel_x: gen_safe_range(&mut game.rng, -t2.vel_x, -t2.vel_x * radius_ratio),
+                //         vel_y: gen_safe_range(&mut game.rng, -t2.vel_y, -t2.vel_y * radius_ratio),
+                //         acc_x: 0.0,
+                //         acc_y: 0.0,
+                //     },
+                //     radius: r2 * 0.7,
+                // };
+                // results.created.push(meteor);
+
+                // const MIN_SPAWN: u32 = 1;
+                // const MAX_SPAWN: u32 = 3;
+                // let spawn_count: usize = game.rng.gen_range(MIN_SPAWN, MAX_SPAWN) as usize;
+
+                // let total_radius: f32 = (r1 + r2) * 0.3;
+                // let mut radius_weights: Vec<f32> = Vec::new();
+                // for _ in 0..spawn_count {
+                //     radius_weights.push(game.rng.gen());
+                // }
+                // let weight_factor: f32 = total_radius / radius_weights.iter().sum::<f32>();
+
+                // for i in 0..spawn_count {
+                //     let meteor = MeteorData {
+                //         transform: Transform {
+                //             pos_x: gen_safe_range(&mut game.rng, t1.pos_x, t2.pos_x),
+                //             pos_y: gen_safe_range(&mut game.rng, t1.pos_y, t2.pos_y),
+                //             vel_x: gen_safe_range(&mut game.rng, -t1.vel_x, -t2.vel_x),
+                //             vel_y: gen_safe_range(&mut game.rng, -t1.vel_y, -t2.vel_y),
+                //             acc_x: 0.0,
+                //             acc_y: 0.0,
+                //         },
+                //         radius: radius_weights[i] * weight_factor,
+                //     };
+                //     const MIN_RADIUS: f32 = 0.007;
+                //     if meteor.radius > MIN_RADIUS {
+                //         results.created.push(meteor);
+                //     }
+                // }
+                println!("Collision: {} x {}", collision.first, collision.second);
+                destroyed_unique.insert(collision.first);
+                destroyed_unique.insert(collision.second);
+            }
+            _ => {}
+        };
     }
     for destroyed in destroyed_unique {
         results.destroyed_ids.push(destroyed);
@@ -626,7 +702,7 @@ fn add_new(game: &mut SaveThePinkSkin, created: Vec<MeteorData>) {
 impl EventHandler for SaveThePinkSkin {
     fn update(&mut self, ctx: &mut Context) -> GameResult<()> {
         const TARGET_FPS: u32 = 60;
-        const SPAWN_INTERVAL: f32 = 0.1;
+        const SPAWN_INTERVAL: f32 = 0.5;
 
         let time: f32 = ggez::timer::time_since_start(&ctx).as_secs() as f32;
 
@@ -691,12 +767,23 @@ impl EventHandler for SaveThePinkSkin {
                 }
             }
 
-            let mut destroy_small = vec![];
+            let mut to_destroy = vec![];
             for object in &mut self.objects.values_mut() {
-                if object.collidable
-                    && Some(object.id) != self.earth_id
-                    && Some(object.id) != self.spaceship_id
-                {
+                if let Some(ttl) = object.ttl {
+                    println!("ttl: {}", ttl);
+                    object.ttl = Some(ttl - 1.0);
+                    if object.ttl <= Some(0.0) {
+                        to_destroy.push(object.id);
+                    }
+                }
+            }
+            for destroy in to_destroy {
+                self.remove_object(destroy);
+            }
+
+            let mut to_destroy = vec![];
+            for object in &mut self.objects.values_mut() {
+                if object.collidable && object.object_type == ObjType::Meteor {
                     if let Some(circle_data) = &mut object.circle_data {
                         let relative_size = (circle_data.radius - METEOR_DESTROY_RADIUS)
                             / (METEOR_MAX_SIZE - METEOR_DESTROY_RADIUS);
@@ -705,12 +792,12 @@ impl EventHandler for SaveThePinkSkin {
                         let decay_rate = 0.0005 + size_factor * 0.03;
                         circle_data.radius *= 1.0 - decay_rate;
                         if circle_data.radius < METEOR_DESTROY_RADIUS {
-                            destroy_small.push(object.id);
+                            to_destroy.push(object.id);
                         }
                     }
                 }
             }
-            for destroy in destroy_small {
+            for destroy in to_destroy {
                 self.remove_object(destroy);
             }
 
@@ -847,6 +934,12 @@ impl EventHandler for SaveThePinkSkin {
                     }
                 }
             }
+        }
+    }
+
+    fn mouse_button_down_event(&mut self, _ctx: &mut Context, button: MouseButton, x: f32, y: f32) {
+        if button == MouseButton::Left {
+            self.shoot(x / SCREEN_SIZE_X, y / SCREEN_SIZE_Y);
         }
     }
 }
