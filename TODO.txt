@@ -5,7 +5,7 @@ Core:
 - Spawn meteors: DONE
 - Add collisions and destruction: DONE
 - Display population: DONE
-- Add lose conditions
+- Add lose conditions: DONE
 - Add pew pew beam
 - Add meteor destruction
 - Add menu and allow restart
