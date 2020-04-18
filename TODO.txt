@@ -4,6 +4,7 @@ Core:
 - Make the spaceship controllable with WASD: DONE
 - Spawn meteors: DONE
 - Add collisions and destruction: DONE
+- Display population: DONE
 - Add lose conditions
 - Add pew pew beam
 - Add meteor destruction

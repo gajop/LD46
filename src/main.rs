@@ -1,4 +1,7 @@
+use std::collections::HashMap;
 use std::collections::HashSet;
+use std::env;
+use std::path;
 
 use rand::prelude::*;
 
@@ -15,39 +18,71 @@ use rand::{
 const SCREEN_SIZE_X: f32 = 1000.0;
 const SCREEN_SIZE_Y: f32 = 1000.0;
 
-fn main() {
+fn main() -> GameResult {
+    let resource_dir = if let Ok(manifest_dir) = env::var("CARGO_MANIFEST_DIR") {
+        let mut path = path::PathBuf::from(manifest_dir);
+        path.push("resources");
+        path
+    } else {
+        path::PathBuf::from("./resources")
+    };
+
     // Make a Context.
     let (mut ctx, mut event_loop) = ContextBuilder::new("save_the_pink_skins", "gajop")
         .window_mode(conf::WindowMode::default().dimensions(SCREEN_SIZE_X, SCREEN_SIZE_Y))
+        .add_resource_path(resource_dir)
         .build()
         .expect("Failed to create create ggez context. Please report this error");
 
     // Create an instance of your event handler.
     // Usually, you should provide it with the Context object to
     // use when setting your game up.
-    let mut my_game = SaveThePinkSkin::new(&mut ctx);
-    add_spaceship(&mut my_game);
-    add_earth(&mut my_game);
+    let mut my_game = SaveThePinkSkin::new(&mut ctx)?;
+    my_game.add_spaceship();
+    my_game.add_earth();
+    my_game.add_text_population();
 
     // Run!
     match event::run(&mut ctx, &mut event_loop, &mut my_game) {
         Ok(_) => println!("Exited cleanly."),
         Err(e) => println!("Error occured: {}", e),
     }
+
+    Ok(())
 }
 
+#[derive(Clone, Debug)]
 struct GameObject {
+    id: usize,
+    transform: Transform,
+    collidable: bool,
+}
+
+#[derive(Clone, Debug)]
+struct Transform {
     pos_x: f32,
     pos_y: f32,
-    radius: f32,
     vel_x: f32,
     vel_y: f32,
     acc_x: f32,
     acc_y: f32,
+}
+
+#[derive(Clone, Debug)]
+struct CircleObject {
+    id: usize,
+    radius: f32,
     color: graphics::Color,
 }
 
-#[derive(Default)]
+#[derive(Clone, Debug)]
+struct TextObject {
+    id: usize,
+    text: graphics::Text,
+    expiration_time: Option<i32>,
+}
+
+#[derive(Default, Clone, Debug)]
 struct Controls {
     left_right: Option<Direction>,
     up_down: Option<Direction>,
@@ -60,119 +95,194 @@ const ACC_STEP_Y: f32 = 0.00001;
 struct SaveThePinkSkin {
     // spaceship: GameObject,
     // earth: GameObject,
-    objects: Vec<GameObject>,
+    id_generator: usize,
+    objects: HashMap<usize, GameObject>,
+    circles: Vec<CircleObject>,
+    texts: Vec<TextObject>,
     spaceship_id: Option<usize>,
     earth_id: Option<usize>,
     controls: Controls,
     rng: ThreadRng,
     next_meteor_spawn: Option<f32>,
-}
-
-fn add_spaceship(game: &mut SaveThePinkSkin) {
-    game.objects.push(GameObject {
-        pos_x: 0.1,
-        pos_y: 0.3,
-        radius: 0.01,
-        color: graphics::Color::new(0.5, 0.5, 0.7, 1.0),
-        vel_x: 0.0,
-        vel_y: 0.0,
-        acc_x: 0.0,
-        acc_y: 0.0,
-    });
-    game.spaceship_id = Some(game.objects.len() - 1);
-}
-
-fn add_earth(game: &mut SaveThePinkSkin) {
-    game.objects.push(GameObject {
-        pos_x: 0.5,
-        pos_y: 0.5,
-        radius: 0.1,
-        color: graphics::Color::new(0.3, 0.7, 0.3, 1.0),
-        vel_x: 0.0,
-        vel_y: 0.0,
-        acc_x: 0.0,
-        acc_y: 0.0,
-    });
-    game.earth_id = Some(game.objects.len() - 1);
-}
-
-fn dist(first: &GameObject, second: &GameObject) -> f32 {
-    let dx = first.pos_x - second.pos_x;
-    let dy = first.pos_y - second.pos_y;
-    return (dx * dx + dy * dy).sqrt() - first.radius - second.radius;
-}
-
-fn add_meteor(game: &mut SaveThePinkSkin) {
-    const MAX_SIZE: f32 = 0.02;
-    const MIN_SIZE: f32 = 0.007;
-    const MAX_VELOCITY: f32 = 0.001;
-    const MIN_VELOCITY: f32 = 0.0003;
-
-    let mut meteor = GameObject {
-        pos_x: 0.0,
-        pos_y: 0.0,
-        radius: 0.0,
-        color: graphics::Color::new(0.878, 0.603, 0.282, 1.0),
-        vel_x: 0.0,
-        vel_y: 0.0,
-        acc_x: 0.0,
-        acc_y: 0.0,
-    };
-
-    meteor.radius = game.rng.gen_range(MIN_SIZE, MAX_SIZE);
-    meteor.vel_x = game.rng.gen_range(MIN_VELOCITY, MAX_VELOCITY);
-    meteor.vel_y = game.rng.gen_range(MIN_VELOCITY, MAX_VELOCITY);
-
-    let dir: Direction = rand::random();
-    let pos: f32 = game.rng.gen();
-
-    match dir {
-        Direction::Up => {
-            meteor.pos_x = pos;
-            meteor.pos_y = 0.0;
-            if game.rng.gen::<f32>() > 0.5 {
-                meteor.vel_x *= -1.0;
-            }
-        }
-        Direction::Down => {
-            meteor.pos_x = pos;
-            meteor.pos_y = 1.0;
-            meteor.vel_y *= -1.0;
-            if game.rng.gen::<f32>() > 0.5 {
-                meteor.vel_x *= -1.0;
-            }
-        }
-        Direction::Left => {
-            meteor.pos_x = 0.0;
-            meteor.pos_y = pos;
-            if game.rng.gen::<f32>() > 0.5 {
-                meteor.vel_y *= -1.0;
-            }
-        }
-        Direction::Right => {
-            meteor.pos_x = 1.0;
-            meteor.pos_y = pos;
-            meteor.vel_x *= -1.0;
-            if game.rng.gen::<f32>() > 0.5 {
-                meteor.vel_y *= -1.0;
-            }
-        }
-    };
-    game.objects.push(meteor);
+    font: graphics::Font,
+    text_population_id: Option<usize>,
+    population_million: f32,
 }
 
 impl SaveThePinkSkin {
-    pub fn new(_ctx: &mut Context) -> SaveThePinkSkin {
+    pub fn new(ctx: &mut Context) -> GameResult<SaveThePinkSkin> {
         // Load/create resources such as images here.
-        SaveThePinkSkin {
-            objects: vec![],
+        let font = graphics::Font::new(ctx, "/PixelEmulator-xq08.ttf")?;
+
+        Ok(SaveThePinkSkin {
+            id_generator: 0,
+            objects: HashMap::new(),
+            circles: vec![],
+            texts: vec![],
             controls: Default::default(),
             spaceship_id: None,
             earth_id: None,
             rng: rand::thread_rng(),
             next_meteor_spawn: None,
+            font: font,
+            text_population_id: None,
+            population_million: 5000.0,
+        })
+    }
+
+    fn make_object(&mut self, transform: Transform) -> usize {
+        self.id_generator += 1;
+        let id = self.id_generator;
+        self.objects.insert(
+            id,
+            GameObject {
+                id,
+                transform,
+                collidable: true,
+            },
+        );
+        id
+    }
+
+    fn add_circle(&mut self, circle: CircleObject) {
+        self.circles.push(circle);
+    }
+
+    fn add_spaceship(&mut self) {
+        let id = self.make_object(Transform {
+            pos_x: 0.1,
+            pos_y: 0.3,
+            vel_x: 0.0,
+            vel_y: 0.0,
+            acc_x: 0.0,
+            acc_y: 0.0,
+        });
+        self.circles.push(CircleObject {
+            id: id,
+            radius: 0.01,
+            color: graphics::Color::new(0.5, 0.5, 0.7, 1.0),
+        });
+        self.spaceship_id = Some(id);
+    }
+
+    fn add_earth(&mut self) {
+        let id = self.make_object(Transform {
+            pos_x: 0.5,
+            pos_y: 0.5,
+            vel_x: 0.0,
+            vel_y: 0.0,
+            acc_x: 0.0,
+            acc_y: 0.0,
+        });
+        self.circles.push(CircleObject {
+            id: id,
+            radius: 0.1,
+            color: graphics::Color::new(0.3, 0.7, 0.3, 1.0),
+        });
+        self.earth_id = Some(id);
+    }
+
+    fn add_text_population(&mut self) {
+        let id = self.make_object(Transform {
+            pos_x: 0.3,
+            pos_y: 0.0,
+            vel_x: 0.0,
+            vel_y: 0.0,
+            acc_x: 0.0,
+            acc_y: 0.0,
+        });
+        self.objects.get_mut(&id).unwrap().collidable = false;
+        self.texts.push(TextObject {
+            id: id,
+            text: graphics::Text::default(),
+            expiration_time: None,
+        });
+        self.text_population_id = Some(self.texts.len() - 1);
+    }
+
+    fn add_meteor(&mut self) {
+        const MAX_SIZE: f32 = 0.02;
+        const MIN_SIZE: f32 = 0.007;
+        const MAX_VELOCITY: f32 = 0.001;
+        const MIN_VELOCITY: f32 = 0.0003;
+
+        let mut meteor = Transform {
+            pos_x: 0.0,
+            pos_y: 0.0,
+            vel_x: self.rng.gen_range(MIN_VELOCITY, MAX_VELOCITY),
+            vel_y: self.rng.gen_range(MIN_VELOCITY, MAX_VELOCITY),
+            acc_x: 0.0,
+            acc_y: 0.0,
+        };
+
+        let dir: Direction = rand::random();
+        let pos: f32 = self.rng.gen();
+
+        match dir {
+            Direction::Up => {
+                meteor.pos_x = pos;
+                meteor.pos_y = 0.0;
+                if self.rng.gen::<f32>() > 0.5 {
+                    meteor.vel_x *= -1.0;
+                }
+            }
+            Direction::Down => {
+                meteor.pos_x = pos;
+                meteor.pos_y = 1.0;
+                meteor.vel_y *= -1.0;
+                if self.rng.gen::<f32>() > 0.5 {
+                    meteor.vel_x *= -1.0;
+                }
+            }
+            Direction::Left => {
+                meteor.pos_x = 0.0;
+                meteor.pos_y = pos;
+                if self.rng.gen::<f32>() > 0.5 {
+                    meteor.vel_y *= -1.0;
+                }
+            }
+            Direction::Right => {
+                meteor.pos_x = 1.0;
+                meteor.pos_y = pos;
+                meteor.vel_x *= -1.0;
+                if self.rng.gen::<f32>() > 0.5 {
+                    meteor.vel_y *= -1.0;
+                }
+            }
+        };
+        let id = self.make_object(meteor);
+        let radius = self.rng.gen_range(MIN_SIZE, MAX_SIZE);
+        self.add_circle(CircleObject {
+            id: id,
+            radius: radius,
+            color: graphics::Color::new(0.878, 0.603, 0.282, 1.0),
+        });
+    }
+
+    fn dist(&self, first: &CircleObject, second: &CircleObject) -> f32 {
+        let t1 = &self.objects.get(&first.id).unwrap().transform;
+        let t2 = &self.objects.get(&second.id).unwrap().transform;
+        dist(t1, t2) - first.radius - second.radius
+    }
+
+    fn remove_object(&mut self, id: usize) {
+        println!("Removed: {}", id);
+        self.circles.retain(|c| c.id != id);
+        self.texts.retain(|c| c.id != id);
+        self.objects.remove(&id);
+        if self.spaceship_id == Some(id) {
+            self.spaceship_id = None;
+        }
+        if self.earth_id == Some(id) {
+            self.earth_id = None;
         }
     }
+}
+
+fn dist(first: &Transform, second: &Transform) -> f32 {
+    let dx = first.pos_x - second.pos_x;
+    let dy = first.pos_y - second.pos_y;
+    (dx * dx + dy * dy).sqrt()
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -211,15 +321,19 @@ struct Collision {
 
 fn find_collisions(game: &SaveThePinkSkin) -> Vec<Collision> {
     let mut collisions = Vec::<Collision>::new();
-    for i in 0..game.objects.len() - 1 {
-        for j in (i + 1)..game.objects.len() {
-            let object1 = &game.objects[i];
-            let object2 = &game.objects[j];
-            if dist(object1, object2) <= 0.0 {
-                collisions.push(Collision {
-                    first: i,
-                    second: j,
-                });
+    for i in 0..game.circles.len() {
+        for j in (i + 1)..game.circles.len() {
+            let circle1 = &game.circles[i];
+            let circle2 = &game.circles[j];
+            if game.dist(&circle1, &circle2) <= 0.0 {
+                let object1 = game.objects.get(&circle1.id).unwrap();
+                let object2 = game.objects.get(&circle2.id).unwrap();
+                if object1.collidable && object2.collidable {
+                    collisions.push(Collision {
+                        first: object1.id,
+                        second: object2.id,
+                    });
+                }
                 // println!("earth colided with meteor: {}", i);
             }
         }
@@ -255,7 +369,7 @@ fn process_collisions(game: &mut SaveThePinkSkin, collisions: &Vec<Collision>) -
         }
     }
     for destroyed in destroyed_unique {
-        if destroyed >= 2 {
+        if Some(destroyed) != game.earth_id && Some(destroyed) != game.spaceship_id {
             results.destroyed_ids.push(destroyed);
         }
     }
@@ -267,30 +381,27 @@ fn cleanup_destroyed(game: &mut SaveThePinkSkin, destroyed_ids: &Vec<usize>) {
     if game.objects.is_empty() {
         return;
     }
-    let mut index: usize = 0;
-    game.objects.retain(|_| {
-        let retain = !destroyed_ids.contains(&index);
-        index += 1;
-        retain
-    })
+    for id in destroyed_ids {
+        game.remove_object(*id);
+    }
 }
 
 fn add_new(game: &mut SaveThePinkSkin, created: Vec<GameObject>) {
     for object in created {
-        game.objects.push(object);
+        game.objects.insert(object.id, object);
     }
 }
 
 impl EventHandler for SaveThePinkSkin {
     fn update(&mut self, ctx: &mut Context) -> GameResult<()> {
         const TARGET_FPS: u32 = 60;
-        const SPAWN_INTERVAL: f32 = 1.0;
+        const SPAWN_INTERVAL: f32 = 0.10;
 
         let time: f32 = ggez::timer::time_since_start(&ctx).as_secs() as f32;
 
         if let Some(next_meteor_spawn) = self.next_meteor_spawn {
             if time > next_meteor_spawn {
-                add_meteor(self);
+                self.add_meteor();
                 self.next_meteor_spawn = Some(time + SPAWN_INTERVAL);
             }
         } else {
@@ -299,45 +410,49 @@ impl EventHandler for SaveThePinkSkin {
 
         while ggez::timer::check_update_time(ctx, TARGET_FPS) {
             if let Some(spaceship_id) = self.spaceship_id {
-                let spaceship = &mut self.objects[spaceship_id];
-                match self.controls.left_right {
-                    Some(Direction::Left) => spaceship.acc_x -= ACC_STEP_X,
-                    Some(Direction::Right) => spaceship.acc_x += ACC_STEP_X,
-                    _ => {
-                        spaceship.acc_x =
-                            spaceship.acc_x.signum() * (spaceship.acc_x.abs() - ACC_STEP_X)
-                    }
-                };
+                let controls = self.controls.clone();
+                if let Some(spaceship) = self.objects.get_mut(&spaceship_id) {
+                    let spaceship_tr = &mut spaceship.transform;
+                    match controls.left_right {
+                        Some(Direction::Left) => spaceship_tr.acc_x -= ACC_STEP_X,
+                        Some(Direction::Right) => spaceship_tr.acc_x += ACC_STEP_X,
+                        _ => {
+                            spaceship_tr.acc_x = spaceship_tr.acc_x.signum()
+                                * (spaceship_tr.acc_x.abs() - ACC_STEP_X)
+                        }
+                    };
 
-                match self.controls.up_down {
-                    Some(Direction::Up) => spaceship.acc_y -= ACC_STEP_Y,
-                    Some(Direction::Down) => spaceship.acc_y += ACC_STEP_Y,
-                    _ => {
-                        spaceship.acc_y =
-                            spaceship.acc_y.signum() * (spaceship.acc_y.abs() - ACC_STEP_Y)
-                    }
-                };
+                    match controls.up_down {
+                        Some(Direction::Up) => spaceship_tr.acc_y -= ACC_STEP_Y,
+                        Some(Direction::Down) => spaceship_tr.acc_y += ACC_STEP_Y,
+                        _ => {
+                            spaceship_tr.acc_y = spaceship_tr.acc_y.signum()
+                                * (spaceship_tr.acc_y.abs() - ACC_STEP_Y)
+                        }
+                    };
 
-                spaceship.acc_x = na::clamp(spaceship.acc_x, -MAX_ACC_X, MAX_ACC_X);
-                spaceship.acc_y = na::clamp(spaceship.acc_y, -MAX_ACC_Y, MAX_ACC_Y);
+                    spaceship_tr.acc_x = na::clamp(spaceship_tr.acc_x, -MAX_ACC_X, MAX_ACC_X);
+                    spaceship_tr.acc_y = na::clamp(spaceship_tr.acc_y, -MAX_ACC_Y, MAX_ACC_Y);
+                }
             }
 
-            for mut object in &mut self.objects {
-                object.vel_x += object.acc_x;
-                object.vel_y += object.acc_y;
+            for object in &mut self.objects.values_mut() {
+                let transform = &mut object.transform;
+                transform.vel_x += transform.acc_x;
+                transform.vel_y += transform.acc_y;
 
-                object.pos_x += object.vel_x;
-                object.pos_y += object.vel_y;
+                transform.pos_x += transform.vel_x;
+                transform.pos_y += transform.vel_y;
 
-                if object.pos_x - object.radius > 1.0 {
-                    object.pos_x = 0.0;
-                } else if object.pos_x + object.radius < 0.0 {
-                    object.pos_x = 1.0;
+                if transform.pos_x > 1.0 {
+                    transform.pos_x = 0.0;
+                } else if transform.pos_x < 0.0 {
+                    transform.pos_x = 1.0;
                 }
-                if object.pos_y - object.radius > 1.0 {
-                    object.pos_y = 0.0;
-                } else if object.pos_y + object.radius < 0.0 {
-                    object.pos_y = 1.0;
+                if transform.pos_y > 1.0 {
+                    transform.pos_y = 0.0;
+                } else if transform.pos_y < 0.0 {
+                    transform.pos_y = 1.0;
                 }
             }
 
@@ -346,23 +461,10 @@ impl EventHandler for SaveThePinkSkin {
             cleanup_destroyed(self, &results.destroyed_ids);
             add_new(self, results.created);
 
-            for object in &mut self.objects {
-                object.vel_x += object.acc_x;
-                object.vel_y += object.acc_y;
-
-                object.pos_x += object.vel_x;
-                object.pos_y += object.vel_y;
-
-                if object.pos_x - object.radius > 1.0 {
-                    object.pos_x = 0.0;
-                } else if object.pos_x + object.radius < 0.0 {
-                    object.pos_x = 1.0;
-                }
-                if object.pos_y - object.radius > 1.0 {
-                    object.pos_y = 0.0;
-                } else if object.pos_y + object.radius < 0.0 {
-                    object.pos_y = 1.0;
-                }
+            if let Some(text_population_id) = self.text_population_id {
+                let text_population = &mut self.texts[text_population_id];
+                let population_str = format!("Population: {}M", self.population_million);
+                text_population.text = graphics::Text::new((population_str, self.font, 48.0));
             }
         }
 
@@ -371,25 +473,40 @@ impl EventHandler for SaveThePinkSkin {
 
     fn draw(&mut self, ctx: &mut Context) -> GameResult<()> {
         graphics::clear(ctx, graphics::BLACK);
-        // Draw code here...
 
-        for object in &self.objects {
-            let circle = graphics::Mesh::new_circle(
-                ctx,
-                graphics::DrawMode::fill(),
-                na::Point2::new(0.0, 0.0),
-                object.radius * SCREEN_SIZE_X,
-                0.1,
-                object.color,
-            )?;
-            graphics::draw(
-                ctx,
-                &circle,
-                (na::Point2::new(
-                    object.pos_x * SCREEN_SIZE_X,
-                    object.pos_y * SCREEN_SIZE_Y,
-                ),),
-            )?;
+        for circle in &self.circles {
+            if let Some(object) = self.objects.get(&circle.id) {
+                let circle = graphics::Mesh::new_circle(
+                    ctx,
+                    graphics::DrawMode::fill(),
+                    na::Point2::new(0.0, 0.0),
+                    circle.radius * SCREEN_SIZE_X,
+                    0.1,
+                    circle.color,
+                )?;
+                graphics::draw(
+                    ctx,
+                    &circle,
+                    (na::Point2::new(
+                        object.transform.pos_x * SCREEN_SIZE_X,
+                        object.transform.pos_y * SCREEN_SIZE_Y,
+                    ),),
+                )?;
+            }
+        }
+
+        for text in &self.texts {
+            if let Some(object) = self.objects.get(&text.id) {
+                graphics::draw(
+                    ctx,
+                    &text.text,
+                    (na::Point2::new(
+                        object.transform.pos_x * SCREEN_SIZE_X,
+                        object.transform.pos_y * SCREEN_SIZE_Y,
+                    ),),
+                )?;
+                graphics::present(ctx)?;
+            }
         }
 
         graphics::present(ctx)
