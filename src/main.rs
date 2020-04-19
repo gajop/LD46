@@ -429,7 +429,7 @@ impl SaveThePinkSkin {
             ObjType::Clouds,
             Shape::Circle,
             Some(CircleData {
-                radius: 0.105,
+                radius: 0.103,
                 color: graphics::Color::new(0.15, 0.15, 0.3, 0.3),
             }),
             None,
@@ -1421,11 +1421,15 @@ impl EventHandler for SaveThePinkSkin {
                             let uv_scale = match obj.object_type {
                                 ObjType::Earth => Some(na::Point2::new(0.5, 0.9)),
                                 ObjType::Clouds => Some(na::Point2::new(0.25 * 0.8, 0.8)),
+                                ObjType::Meteor => Some(na::Point2::new(
+                                    (obj.id as f32).sin() / 4.0 + 0.25 + 1.0,
+                                    (obj.id as f32).sin() / 4.0 + 0.25 + 1.0,
+                                )),
                                 _ => None,
                             };
                             let samples = match obj.object_type {
                                 ObjType::Earth => 500,
-                                ObjType::Meteor => 50,
+                                ObjType::Meteor => 150,
                                 _ => 250,
                             };
                             let mesh = match obj.object_type {
@@ -1436,8 +1440,8 @@ impl EventHandler for SaveThePinkSkin {
                                     samples,
                                     Some(img.clone()),
                                     Some(na::Point2::new(
-                                        obj.render_coords.pos_x,
-                                        obj.render_coords.pos_y,
+                                        (obj.id as f32).sin(),
+                                        (obj.id as f32 * 1.3123).cos(),
                                     )),
                                     uv_scale,
                                 )?,

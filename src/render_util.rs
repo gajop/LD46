@@ -131,10 +131,10 @@ pub fn build_textured_circle_earth(
 	mb.build(ctx)
 }
 
-const METEOR_BUMPINESS: f32 = 0.05;
+const METEOR_BUMPINESS: f32 = 0.1;
 
 fn rng_meteor(id: usize, angle: f32) -> f32 {
-	((id as f32).sin() * angle * 3.3217).sin() * METEOR_BUMPINESS
+	(id as f32).sin() * (angle).sin() * METEOR_BUMPINESS
 }
 
 pub fn build_textured_circle_meteor(
@@ -167,8 +167,6 @@ pub fn build_textured_circle_meteor(
 	let v = angle.cos() + rng_meteor(id, angle);
 	let x = radius * u;
 	let y = radius * v;
-	// let light = 1.0 - u;
-	let light = 1.0;
 
 	triangle_verts.push(graphics::Vertex {
 		pos: [x, y],
@@ -176,7 +174,7 @@ pub fn build_textured_circle_meteor(
 			uv_wrap(uv_scale.x * (u / 2.0 + 0.5 + uv_offset.x)),
 			uv_wrap(uv_scale.y * (v / 2.0 + 0.5 + uv_offset.y)),
 		],
-		color: [light, light, light, 1.0],
+		color: [1.0, 1.0, 1.0, 1.0],
 	});
 
 	for i in 1..(samples as u32) + 1 {
@@ -195,7 +193,7 @@ pub fn build_textured_circle_meteor(
 				uv_wrap(uv_scale.x * (u / 2.0 + 0.5 + uv_offset.x)),
 				uv_wrap(uv_scale.y * (v / 2.0 + 0.5 + uv_offset.y)),
 			],
-			color: [light, light, light, 1.0],
+			color: [1.0, 1.0, 1.0, 1.0],
 		});
 	}
 	mb.raw(&triangle_verts, &triangle_indices, image);
