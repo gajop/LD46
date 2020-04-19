@@ -15,8 +15,8 @@ Core:
 Extra:
 - Make meteors explode on hit: DONE
 - Make earth art: DONE
-- Make meteor art
-- Make spaceship art
+- Make meteor art: DONE
+- Make spaceship art: DONE
 - Add menu
 
 Polish:
