@@ -31,16 +31,17 @@ const MAX_SPEED_Y: f32 = 0.005;
 const ACC_STEP_X: f32 = 0.00001;
 const ACC_STEP_Y: f32 = 0.00001;
 
-const METEOR_MAX_SIZE: f32 = 0.02;
-const METEOR_MIN_SIZE: f32 = 0.007;
+const METEOR_BASE_MAX_SIZE: f32 = 0.015;
+const METEOR_BASE_MIN_SIZE: f32 = 0.007;
 const METEOR_DESTROY_RADIUS: f32 = 0.001;
-const METEOR_SPAWN_INTERVAL: f32 = 0.5;
+const METEOR_BASE_SPAWN_INTERVAL: f32 = 1.8;
 
-const POPULATION_START: f32 = 2500.0;
+const POPULATION_START: f32 = 1200.0;
 const POP_MULTI_FACTOR: f32 = 1.0005;
-const VICTORY_PROGRESS_TICK: f32 = 0.0001;
+const VICTORY_PROGRESS_TICK: f32 = 0.00015;
 
-const OVERPOP_NUMBER: f32 = 10000.0;
+const OVERPOP_LIMIT: f32 = 10000.0;
+const OVERPOP_WARNING_NUMBER: f32 = 7000.0;
 const OVERPOP_MIN_WARNING_INTERVAL: f32 = 30.0;
 const OVERPOP_WARNING_TTL: f32 = 400.0;
 
@@ -605,7 +606,10 @@ impl SaveThePinkSkin {
         let dir: Direction = rand::random();
         let pos: f32 = self.rng.gen();
 
-        let radius = self.rng.gen_range(METEOR_MIN_SIZE, METEOR_MAX_SIZE);
+        let radius = self.rng.gen_range(
+            METEOR_BASE_MIN_SIZE * self.progress_difficulty_factor(),
+            METEOR_BASE_MAX_SIZE * self.progress_difficulty_factor(),
+        );
 
         match dir {
             Direction::Up => {
@@ -704,6 +708,10 @@ impl SaveThePinkSkin {
 
     fn get_mut(&mut self, id: usize) -> &mut GameObject {
         self.objects.get_mut(&id).unwrap()
+    }
+
+    fn progress_difficulty_factor(&self) -> f32 {
+        1.0 + self.victory_progress * 1.5
     }
 }
 
@@ -1054,14 +1062,15 @@ impl EventHandler for SaveThePinkSkin {
 
         let time: f32 = ggez::timer::time_since_start(&ctx).as_millis() as f32 / 1000.0;
 
+        let meteor_spawn_interval = METEOR_BASE_SPAWN_INTERVAL / self.progress_difficulty_factor();
         if let Some(next_meteor_spawn) = self.next_meteor_spawn {
             while time > self.next_meteor_spawn.unwrap() {
                 self.generate_meteor();
                 self.next_meteor_spawn =
-                    Some(self.next_meteor_spawn.unwrap() + METEOR_SPAWN_INTERVAL);
+                    Some(self.next_meteor_spawn.unwrap() + meteor_spawn_interval);
             }
         } else {
-            self.next_meteor_spawn = Some(time + METEOR_SPAWN_INTERVAL);
+            self.next_meteor_spawn = Some(time + meteor_spawn_interval);
         }
 
         while ggez::timer::check_update_time(ctx, TARGET_FPS) {
@@ -1148,7 +1157,7 @@ impl EventHandler for SaveThePinkSkin {
                 if object.collidable && object.object_type == ObjType::Meteor {
                     if let Some(circle_data) = &mut object.circle_data {
                         let relative_size = (circle_data.radius - METEOR_DESTROY_RADIUS)
-                            / (METEOR_MAX_SIZE - METEOR_DESTROY_RADIUS);
+                            / (0.02 - METEOR_DESTROY_RADIUS);
 
                         let size_factor = (0.3 - relative_size).max(0.0);
                         let decay_rate = 0.0005 + size_factor * 0.03;
@@ -1185,7 +1194,7 @@ impl EventHandler for SaveThePinkSkin {
                         if let Some(spaceship_id) = self.spaceship_id {
                             self.remove_object(spaceship_id);
                         }
-                    } else if self.population_million >= OVERPOP_NUMBER {
+                    } else if self.population_million >= OVERPOP_LIMIT {
                         self.victory_result = Some(GameVictoryResult::OverPopulation);
                         let _ = self.game_resources.overpopulation_end_sound.play();
                     } else if self.victory_progress >= 1.0 {
@@ -1201,7 +1210,7 @@ impl EventHandler for SaveThePinkSkin {
                 _ => {}
             }
 
-            if self.population_million > 7000.0 {
+            if self.population_million > OVERPOP_WARNING_NUMBER {
                 self.maybe_make_overpopulation_warning(time);
             } else {
                 self.next_overpop_warning_enabled = true;
@@ -1216,7 +1225,7 @@ impl EventHandler for SaveThePinkSkin {
                     "Population: {}",
                     population_to_string(self.population_million)
                 );
-                let text_str = if self.population_million > 7000.0 {
+                let text_str = if self.population_million > OVERPOP_WARNING_NUMBER {
                     format!("{} (!)", text_str)
                 } else {
                     text_str

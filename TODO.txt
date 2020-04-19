@@ -22,6 +22,7 @@ Polish:
 - Stars: DONE
 - Hold to shoot: DONE
 - Planet: atmosphere: DONE
+- Balance
 - Planet clouds
 - Bigger screen?
 - Start screen with instructions
