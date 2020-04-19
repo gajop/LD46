@@ -1067,6 +1067,11 @@ fn object_type_image<'a>(
     }
 }
 
+fn get_decay_size_factor(radius: f32) -> f32 {
+    let relative_size = (radius - METEOR_DESTROY_RADIUS) / (0.02 - METEOR_DESTROY_RADIUS);
+    (0.3 - relative_size).max(0.0)
+}
+
 impl EventHandler for SaveThePinkSkin {
     fn update(&mut self, ctx: &mut Context) -> GameResult<()> {
         const TARGET_FPS: u32 = 60;
@@ -1167,11 +1172,8 @@ impl EventHandler for SaveThePinkSkin {
             for object in &mut self.objects.values_mut() {
                 if object.collidable && object.object_type == ObjType::Meteor {
                     if let Some(circle_data) = &mut object.circle_data {
-                        let relative_size = (circle_data.radius - METEOR_DESTROY_RADIUS)
-                            / (0.02 - METEOR_DESTROY_RADIUS);
-
-                        let size_factor = (0.3 - relative_size).max(0.0);
-                        let decay_rate = 0.0005 + size_factor * 0.03;
+                        let decay_size_factor = get_decay_size_factor(circle_data.radius);
+                        let decay_rate = 0.0005 + decay_size_factor * 0.03;
                         circle_data.radius *= 1.0 - decay_rate;
                         if circle_data.radius < METEOR_DESTROY_RADIUS {
                             to_destroy.push(object.id);
@@ -1317,6 +1319,33 @@ impl EventHandler for SaveThePinkSkin {
                     )?;
                     match image {
                         Some(img) => {
+                            let decay_factor = get_decay_size_factor(circle_data.radius);
+                            if obj.object_type == ObjType::Meteor && decay_factor > 0.0 {
+                                let circle = graphics::Mesh::new_circle(
+                                    ctx,
+                                    graphics::DrawMode::fill(),
+                                    na::Point2::new(0.0, 0.0),
+                                    circle_data.radius
+                                        * SCREEN_SIZE_X
+                                        * (na::clamp(decay_factor * 2.5, 0.01, 2.5) + 1.0),
+                                    0.1,
+                                    graphics::Color::new(
+                                        0.8,
+                                        0.1,
+                                        0.1,
+                                        na::clamp(decay_factor, 0.01, 0.5),
+                                    ),
+                                )?;
+                                graphics::draw(
+                                    ctx,
+                                    &circle,
+                                    (na::Point2::new(
+                                        obj.transform.pos_x * SCREEN_SIZE_X,
+                                        obj.transform.pos_y * SCREEN_SIZE_Y,
+                                    ),),
+                                )?;
+                            }
+
                             let uv_scale = match obj.object_type {
                                 ObjType::Earth => Some(na::Point2::new(0.5, 0.9)),
                                 ObjType::Meteor => Some(na::Point2::new(

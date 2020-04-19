@@ -24,6 +24,7 @@ Polish:
 - Planet: atmosphere: DONE
 - Balance: DONE
 - Impact: Red text: DONE
+- Burning meteors: DONE
 - Planet clouds
 - Blink eye
 - More unique meteors
