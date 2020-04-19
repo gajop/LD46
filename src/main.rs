@@ -5,6 +5,8 @@ use std::path;
 
 use rand::prelude::*;
 
+use ggez::audio;
+use ggez::audio::SoundSource;
 use ggez::conf;
 use ggez::event::{self, EventHandler, KeyCode, KeyMods, MouseButton};
 use ggez::nalgebra as na;
@@ -58,12 +60,24 @@ struct SaveThePinkSkin {
     controls: Controls,
     rng: ThreadRng,
     next_meteor_spawn: Option<f32>,
-    font: graphics::Font,
+    game_resources: GameResources,
     victory_result: Option<GameVictoryResult>,
     text_population_id: Option<usize>,
     text_spaceship_hp_id: Option<usize>,
     population_million: f32,
     spaceship_hp: f32,
+}
+
+struct GameResources {
+    font: graphics::Font,
+    death_sound: audio::Source,
+    earth_meteor_sound: audio::Source,
+    earth_end_sound: audio::Source,
+    meteor_bounce_sound: audio::Source,
+    meteor_explosion_sound: audio::Source,
+    ship_meteor_sound: audio::Source,
+    shoot_sound: audio::Source,
+    victory_sound: audio::Source,
 }
 
 #[derive(Clone, Debug)]
@@ -145,13 +159,31 @@ impl SaveThePinkSkin {
     pub fn new(ctx: &mut Context) -> GameResult<SaveThePinkSkin> {
         // Load/create resources such as images here.
         let font = graphics::Font::new(ctx, "/PixelEmulator-xq08.ttf")?;
+        let death_sound = audio::Source::new(ctx, "/death.wav")?;
+        let earth_meteor_sound = audio::Source::new(ctx, "/earth-meteor.wav")?;
+        let earth_end_sound = audio::Source::new(ctx, "/earth-end.wav")?;
+        let meteor_bounce_sound = audio::Source::new(ctx, "/meteor-bounce.wav")?;
+        let meteor_explosion_sound = audio::Source::new(ctx, "/meteor-explosion.wav")?;
+        let ship_meteor_sound = audio::Source::new(ctx, "/ship-meteor.wav")?;
+        let shoot_sound = audio::Source::new(ctx, "/shoot.wav")?;
+        let victory_sound = audio::Source::new(ctx, "/victory.wav")?;
 
-        let game = SaveThePinkSkin::init(font);
+        let game = SaveThePinkSkin::init(GameResources {
+            font,
+            death_sound,
+            earth_meteor_sound,
+            earth_end_sound,
+            meteor_bounce_sound,
+            meteor_explosion_sound,
+            ship_meteor_sound,
+            shoot_sound,
+            victory_sound,
+        });
 
         Ok(game)
     }
 
-    fn init(font: graphics::Font) -> SaveThePinkSkin {
+    fn init(game_resources: GameResources) -> SaveThePinkSkin {
         let mut game = SaveThePinkSkin {
             id_generator: 0,
             objects: HashMap::new(),
@@ -160,7 +192,7 @@ impl SaveThePinkSkin {
             earth_id: None,
             rng: rand::thread_rng(),
             next_meteor_spawn: None,
-            font: font,
+            game_resources,
             victory_result: None,
             text_population_id: None,
             text_spaceship_hp_id: None,
@@ -176,7 +208,23 @@ impl SaveThePinkSkin {
     }
 
     fn restart(&mut self) {
-        *self = SaveThePinkSkin::init(self.font);
+        // *self = SaveThePinkSkin::init(self.game_resources);
+        self.id_generator = 0;
+        self.objects = HashMap::new();
+        self.controls = Default::default();
+        self.spaceship_id = None;
+        self.earth_id = None;
+        self.rng = rand::thread_rng();
+        self.next_meteor_spawn = None;
+        self.victory_result = None;
+        self.text_population_id = None;
+        self.text_spaceship_hp_id = None;
+        self.population_million = 5000.0;
+        self.spaceship_hp = 100.0;
+        self.add_spaceship();
+        self.add_earth();
+        self.add_text_population();
+        self.add_text_spaceship_hp();
     }
 
     fn make_object(
@@ -321,7 +369,7 @@ impl SaveThePinkSkin {
             Shape::Text,
             None,
             Some(TextData {
-                text: graphics::Text::new((end_text_full, self.font, 34.0)),
+                text: graphics::Text::new((end_text_full, self.game_resources.font, 34.0)),
                 expiration_time: None,
                 font_size: 34.0,
             }),
@@ -418,6 +466,7 @@ impl SaveThePinkSkin {
             let dy = y - pos_y;
             let d = (dx * dx + dy * dy).sqrt();
 
+            let _ = self.game_resources.shoot_sound.play();
             self.make_object(
                 Transform {
                     pos_x: pos_x,
@@ -565,6 +614,7 @@ fn process_collisions(game: &mut SaveThePinkSkin, collisions: &Vec<Collision>) -
                 results.ship_damage +=
                     game.get(collider).circle_data.as_ref().unwrap().radius * 1000.0;
                 destroyed_unique.insert(collider);
+                let _ = game.game_resources.ship_meteor_sound.play();
             }
             (ObjType::Earth, ObjType::Meteor) | (ObjType::Meteor, ObjType::Earth) => {
                 let collider = if first_type == ObjType::Meteor {
@@ -575,6 +625,7 @@ fn process_collisions(game: &mut SaveThePinkSkin, collisions: &Vec<Collision>) -
                 results.population_damage +=
                     game.get(collider).circle_data.as_ref().unwrap().radius * 1000.0;
                 destroyed_unique.insert(collider);
+                let _ = game.game_resources.earth_meteor_sound.play();
             }
             (ObjType::Earth, ObjType::Projectile) => {
                 destroyed_unique.insert(collision.second);
@@ -590,6 +641,7 @@ fn process_collisions(game: &mut SaveThePinkSkin, collisions: &Vec<Collision>) -
                 };
                 destroyed_unique.insert(collision.first);
                 destroyed_unique.insert(collision.second);
+                let _ = game.game_resources.meteor_explosion_sound.play();
             }
             (ObjType::Meteor, ObjType::Meteor) => {
                 let m1 = game.objects.get(&collision.first).unwrap();
@@ -670,6 +722,7 @@ fn process_collisions(game: &mut SaveThePinkSkin, collisions: &Vec<Collision>) -
                 //         results.created.push(meteor);
                 //     }
                 // }
+                let _ = game.game_resources.meteor_bounce_sound.play();
                 println!("Collision: {} x {}", collision.first, collision.second);
                 destroyed_unique.insert(collision.first);
                 destroyed_unique.insert(collision.second);
@@ -815,8 +868,13 @@ impl EventHandler for SaveThePinkSkin {
                     let mut finished = true;
                     if self.population_million <= 0.0 {
                         self.victory_result = Some(GameVictoryResult::EveryoneDead);
+                        let _ = self.game_resources.earth_end_sound.play();
                     } else if self.spaceship_hp <= 0.0 {
                         self.victory_result = Some(GameVictoryResult::ShipDestroyed);
+                        let _ = self.game_resources.death_sound.play();
+                        if let Some(spaceship_id) = self.spaceship_id {
+                            self.remove_object(spaceship_id);
+                        }
                     } else if self.population_million >= OVERPOP_NUMBER {
                         self.victory_result = Some(GameVictoryResult::OverPopulation);
                     } else {
@@ -836,16 +894,22 @@ impl EventHandler for SaveThePinkSkin {
                 let text_str = format!("Population: {:.2}M", self.population_million);
                 let object = self.objects.get_mut(&text_population_id).unwrap();
                 if let Some(text_data) = &mut object.text_data {
-                    text_data.text =
-                        graphics::Text::new((text_str, self.font, text_data.font_size));
+                    text_data.text = graphics::Text::new((
+                        text_str,
+                        self.game_resources.font,
+                        text_data.font_size,
+                    ));
                 }
             }
             if let Some(text_spaceship_hp_id) = self.text_spaceship_hp_id {
                 let text_str = format!("HP: {:.0}", self.spaceship_hp);
                 let object = self.objects.get_mut(&text_spaceship_hp_id).unwrap();
                 if let Some(text_data) = &mut object.text_data {
-                    text_data.text =
-                        graphics::Text::new((text_str, self.font, text_data.font_size));
+                    text_data.text = graphics::Text::new((
+                        text_str,
+                        self.game_resources.font,
+                        text_data.font_size,
+                    ));
                 }
             }
         }
