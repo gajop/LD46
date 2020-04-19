@@ -25,9 +25,9 @@ Polish:
 - Balance: DONE
 - Impact: Red text: DONE
 - Burning meteors: DONE
+- Bigger screen: DONE
 - Planet clouds
 - Blink eye
 - More unique meteors
-- Bigger screen?
 - Start screen with instructions
 - Music?

@@ -21,9 +21,6 @@ use rand::{
 mod render_util;
 use render_util::*;
 
-const SCREEN_SIZE_X: f32 = 1000.0;
-const SCREEN_SIZE_Y: f32 = 1000.0;
-
 const MAX_ACC_X: f32 = 0.00005;
 const MAX_ACC_Y: f32 = 0.00005;
 const MAX_SPEED_X: f32 = 0.005;
@@ -62,7 +59,18 @@ fn main() -> GameResult {
 
     // Make a Context.
     let (mut ctx, mut event_loop) = ContextBuilder::new("save_the_pink_skins", "gajop")
-        .window_mode(conf::WindowMode::default().dimensions(SCREEN_SIZE_X, SCREEN_SIZE_Y))
+        .window_mode(conf::WindowMode {
+            width: 768.0,
+            height: 768.0,
+            maximized: false,
+            fullscreen_type: conf::FullscreenType::Windowed,
+            borderless: false,
+            min_width: 640.0,
+            max_width: 640.0,
+            min_height: 0.0,
+            max_height: 0.0,
+            resizable: true,
+        })
         .add_resource_path(resource_dir)
         .build()
         .expect("Failed to create create ggez context. Please report this error");
@@ -103,6 +111,11 @@ struct SaveThePinkSkin {
     next_overpop_warning_enabled: bool,
     next_shooting_time: f32,
     stars: Vec<GameObject>,
+    window_width: f32,
+    window_height: f32,
+    draw_size: f32,
+    offset_x: f32,
+    offset_y: f32,
 }
 
 struct GameResources {
@@ -261,12 +274,15 @@ impl SaveThePinkSkin {
             next_overpop_warning_enabled: true,
             next_shooting_time: 0.0,
             stars: Vec::new(),
+            window_width: 1000.0,
+            window_height: 1000.0,
+            draw_size: 1000.0,
+            offset_x: 0.0,
+            offset_y: 0.0,
         };
         game.add_spaceship();
         game.add_earth();
-        game.add_text_population();
-        game.add_text_spaceship_hp();
-        game.add_text_victory_progress();
+        game.reset_text();
         game.add_stars();
 
         game
@@ -292,9 +308,7 @@ impl SaveThePinkSkin {
         self.stars = Vec::new();
         self.add_spaceship();
         self.add_earth();
-        self.add_text_population();
-        self.add_text_spaceship_hp();
-        self.add_text_victory_progress();
+        self.reset_text();
         self.add_stars();
     }
 
@@ -425,6 +439,24 @@ impl SaveThePinkSkin {
         }
     }
 
+    fn reset_text(&mut self) {
+        if let Some(id) = self.text_population_id {
+            self.remove_object(id);
+        }
+        if let Some(id) = self.text_spaceship_hp_id {
+            self.remove_object(id);
+        }
+        if let Some(id) = self.text_victory_progress_id {
+            self.remove_object(id);
+        }
+        self.text_population_id = None;
+        self.text_spaceship_hp_id = None;
+        self.text_victory_progress_id = None;
+        self.add_text_population();
+        self.add_text_spaceship_hp();
+        self.add_text_victory_progress();
+    }
+
     fn add_text_population(&mut self) {
         let id = self.make_object(
             Transform {
@@ -441,7 +473,7 @@ impl SaveThePinkSkin {
             Some(TextData {
                 text: graphics::Text::default(),
                 expiration_time: None,
-                font_size: 48.0,
+                font_size: 32.0,
                 color: graphics::WHITE,
             }),
         );
@@ -453,7 +485,7 @@ impl SaveThePinkSkin {
         let id = self.make_object(
             Transform {
                 pos_x: 0.4,
-                pos_y: 1.0 - 34.0 / SCREEN_SIZE_Y,
+                pos_y: 1.0 - 26.0 / self.draw_size,
                 vel_x: 0.0,
                 vel_y: 0.0,
                 acc_x: 0.0,
@@ -465,7 +497,7 @@ impl SaveThePinkSkin {
             Some(TextData {
                 text: graphics::Text::default(),
                 expiration_time: None,
-                font_size: 34.0,
+                font_size: 26.0,
                 color: graphics::WHITE,
             }),
         );
@@ -500,7 +532,7 @@ impl SaveThePinkSkin {
             Some(TextData {
                 text: graphics::Text::new((end_text_full, self.game_resources.font, 34.0)),
                 expiration_time: None,
-                font_size: 34.0,
+                font_size: 26.0,
                 color: graphics::WHITE,
             }),
         );
@@ -511,7 +543,7 @@ impl SaveThePinkSkin {
         let id = self.make_object(
             Transform {
                 pos_x: 0.2,
-                pos_y: 0.0 + 48.0 / SCREEN_SIZE_Y,
+                pos_y: 0.0 + 34.0 / self.draw_size,
                 vel_x: 0.0,
                 vel_y: 0.0,
                 acc_x: 0.0,
@@ -523,7 +555,7 @@ impl SaveThePinkSkin {
             Some(TextData {
                 text: graphics::Text::default(),
                 expiration_time: None,
-                font_size: 21.0,
+                font_size: 16.0,
                 color: graphics::WHITE,
             }),
         );
@@ -539,7 +571,7 @@ impl SaveThePinkSkin {
         let id = self.make_object(
             Transform {
                 pos_x: pos_x - 0.1,
-                pos_y: pos_y - 13.0 / SCREEN_SIZE_Y,
+                pos_y: pos_y - 13.0 / self.draw_size,
                 vel_x: 0.0,
                 vel_y: -0.00001,
                 acc_x: 0.0,
@@ -589,10 +621,10 @@ impl SaveThePinkSkin {
                 text: graphics::Text::new((
                     "Overpopulation imminent",
                     self.game_resources.font,
-                    32.0,
+                    26.0,
                 )),
                 expiration_time: None,
-                font_size: 32.0,
+                font_size: 26.0,
                 color: graphics::Color::new(1.0, 0.2, 0.2, 1.0),
             }),
         );
@@ -1119,7 +1151,10 @@ impl EventHandler for SaveThePinkSkin {
 
                 if controls.shooting && self.next_shooting_time < time {
                     let mouse_pos = ggez::input::mouse::position(ctx);
-                    self.shoot(mouse_pos.x / SCREEN_SIZE_X, mouse_pos.y / SCREEN_SIZE_Y);
+                    self.shoot(
+                        (mouse_pos.x - self.offset_x) / self.draw_size,
+                        (mouse_pos.y - self.offset_y) / self.draw_size,
+                    );
                     self.next_shooting_time = time + SHOOTING_SPEED;
                 }
             }
@@ -1289,7 +1324,7 @@ impl EventHandler for SaveThePinkSkin {
                 ctx,
                 graphics::DrawMode::fill(),
                 na::Point2::new(0.0, 0.0),
-                circle_data.radius * SCREEN_SIZE_X,
+                circle_data.radius * self.draw_size,
                 0.1,
                 circle_data.color,
             )?;
@@ -1298,8 +1333,8 @@ impl EventHandler for SaveThePinkSkin {
                 ctx,
                 &circle,
                 (na::Point2::new(
-                    obj.transform.pos_x * SCREEN_SIZE_X,
-                    obj.transform.pos_y * SCREEN_SIZE_Y,
+                    obj.transform.pos_x * self.draw_size + self.offset_x,
+                    obj.transform.pos_y * self.draw_size + self.offset_y,
                 ),),
             )?;
         }
@@ -1313,7 +1348,7 @@ impl EventHandler for SaveThePinkSkin {
                         ctx,
                         graphics::DrawMode::fill(),
                         na::Point2::new(0.0, 0.0),
-                        circle_data.radius * SCREEN_SIZE_X,
+                        circle_data.radius * self.draw_size,
                         0.1,
                         circle_data.color,
                     )?;
@@ -1326,7 +1361,7 @@ impl EventHandler for SaveThePinkSkin {
                                     graphics::DrawMode::fill(),
                                     na::Point2::new(0.0, 0.0),
                                     circle_data.radius
-                                        * SCREEN_SIZE_X
+                                        * self.draw_size
                                         * (na::clamp(decay_factor * 2.5, 0.01, 2.5) + 1.0),
                                     0.1,
                                     graphics::Color::new(
@@ -1340,8 +1375,8 @@ impl EventHandler for SaveThePinkSkin {
                                     ctx,
                                     &circle,
                                     (na::Point2::new(
-                                        obj.transform.pos_x * SCREEN_SIZE_X,
-                                        obj.transform.pos_y * SCREEN_SIZE_Y,
+                                        obj.transform.pos_x * self.draw_size + self.offset_x,
+                                        obj.transform.pos_y * self.draw_size + self.offset_y,
                                     ),),
                                 )?;
                             }
@@ -1363,7 +1398,7 @@ impl EventHandler for SaveThePinkSkin {
                             };
                             let mesh = build_textured_circle_earth(
                                 ctx,
-                                circle_data.radius * SCREEN_SIZE_X,
+                                circle_data.radius * self.draw_size,
                                 samples,
                                 Some(img.clone()),
                                 Some(na::Point2::new(
@@ -1376,8 +1411,8 @@ impl EventHandler for SaveThePinkSkin {
                                 ctx,
                                 &mesh,
                                 (na::Point2::new(
-                                    obj.transform.pos_x * SCREEN_SIZE_X,
-                                    obj.transform.pos_y * SCREEN_SIZE_Y,
+                                    obj.transform.pos_x * self.draw_size + self.offset_x,
+                                    obj.transform.pos_y * self.draw_size + self.offset_y,
                                 ),),
                             )?;
                         }
@@ -1386,8 +1421,8 @@ impl EventHandler for SaveThePinkSkin {
                                 ctx,
                                 &circle,
                                 (na::Point2::new(
-                                    obj.transform.pos_x * SCREEN_SIZE_X,
-                                    obj.transform.pos_y * SCREEN_SIZE_Y,
+                                    obj.transform.pos_x * self.draw_size + self.offset_x,
+                                    obj.transform.pos_y * self.draw_size + self.offset_y,
                                 ),),
                             )?;
                         }
@@ -1406,8 +1441,8 @@ impl EventHandler for SaveThePinkSkin {
                         &text_data.text,
                         (
                             na::Point2::new(
-                                obj.transform.pos_x * SCREEN_SIZE_X,
-                                obj.transform.pos_y * SCREEN_SIZE_Y,
+                                obj.transform.pos_x * self.draw_size + self.offset_x,
+                                obj.transform.pos_y * self.draw_size + self.offset_y,
                             ),
                             text_data.color,
                         ),
@@ -1467,5 +1502,16 @@ impl EventHandler for SaveThePinkSkin {
         if button == MouseButton::Left {
             self.controls.shooting = false;
         }
+    }
+
+    fn resize_event(&mut self, ctx: &mut Context, width: f32, height: f32) {
+        graphics::set_screen_coordinates(ctx, graphics::Rect::new(0.0, 0.0, width, height))
+            .unwrap();
+        self.window_width = width;
+        self.window_height = height;
+        self.draw_size = self.window_width.min(self.window_height);
+        self.offset_x = (self.window_width - self.draw_size).max(0.0) / 2.0;
+        self.offset_y = (self.window_height - self.draw_size).max(0.0) / 2.0;
+        self.reset_text();
     }
 }
