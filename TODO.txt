@@ -17,7 +17,12 @@ Extra:
 - Make earth art: DONE
 - Make meteor art: DONE
 - Make spaceship art: DONE
-- Add menu
 
 Polish:
-- ?
+- Stars: DONE
+- Hold to shoot
+- Planet: atmosphere
+- Planet clouds
+- Bigger screen?
+- Start screen with instructions
+- Music?

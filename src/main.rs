@@ -44,6 +44,10 @@ const OVERPOP_NUMBER: f32 = 10000.0;
 const OVERPOP_MIN_WARNING_INTERVAL: f32 = 30.0;
 const OVERPOP_WARNING_TTL: f32 = 400.0;
 
+const STARS_COUNT: usize = 200;
+const STAR_MIN_SIZE: f32 = 0.0001;
+const STAR_MAX_SIZE: f32 = 0.0005;
+
 fn main() -> GameResult {
     let resource_dir = if let Ok(manifest_dir) = env::var("CARGO_MANIFEST_DIR") {
         let mut path = path::PathBuf::from(manifest_dir);
@@ -94,6 +98,7 @@ struct SaveThePinkSkin {
     spaceship_hp: f32,
     next_overpop_warning: f32,
     next_overpop_warning_enabled: bool,
+    stars: Vec<GameObject>,
 }
 
 struct GameResources {
@@ -248,12 +253,14 @@ impl SaveThePinkSkin {
             victory_progress: 0.0,
             next_overpop_warning: 0.0,
             next_overpop_warning_enabled: true,
+            stars: Vec::new(),
         };
         game.add_spaceship();
         game.add_earth();
         game.add_text_population();
         game.add_text_spaceship_hp();
         game.add_text_victory_progress();
+        game.add_stars();
 
         game
     }
@@ -275,11 +282,13 @@ impl SaveThePinkSkin {
         self.victory_progress = 0.0;
         self.next_overpop_warning = 0.0;
         self.next_overpop_warning_enabled = true;
+        self.stars = Vec::new();
         self.add_spaceship();
         self.add_earth();
         self.add_text_population();
         self.add_text_spaceship_hp();
         self.add_text_victory_progress();
+        self.add_stars();
     }
 
     fn make_object(
@@ -357,6 +366,36 @@ impl SaveThePinkSkin {
         object.render_coords.vel_x = 0.0005;
         object.render_coords.vel_y = 0.0001;
         self.earth_id = Some(id);
+    }
+
+    fn add_stars(&mut self) {
+        for _ in 0..STARS_COUNT {
+            let pos_x = 0.5
+                + self.rng.gen_range(0.1, 0.5) * (self.rng.gen_range(-1.0, 1.0) as f32).signum();
+            let pos_y = 0.5
+                + self.rng.gen_range(0.1, 0.5) * (self.rng.gen_range(-1.0, 1.0) as f32).signum();
+            self.stars.push(GameObject {
+                id: 0,
+                transform: Transform {
+                    pos_x: pos_x,
+                    pos_y: pos_y,
+                    vel_x: 0.0,
+                    vel_y: 0.0,
+                    acc_x: 0.0,
+                    acc_y: 0.0,
+                },
+                render_coords: Default::default(),
+                shape: Shape::Circle,
+                object_type: ObjType::UI,
+                circle_data: Some(CircleData {
+                    radius: self.rng.gen_range(STAR_MIN_SIZE, STAR_MAX_SIZE),
+                    color: graphics::Color::new(0.9, 0.9, 0.9, 0.5),
+                }),
+                text_data: None,
+                ttl: None,
+                collidable: false,
+            })
+        }
     }
 
     fn add_text_population(&mut self) {
@@ -1189,6 +1228,28 @@ impl EventHandler for SaveThePinkSkin {
 
     fn draw(&mut self, ctx: &mut Context) -> GameResult<()> {
         graphics::clear(ctx, graphics::BLACK);
+
+        for obj in &self.stars {
+            let image = object_type_image(self, &obj.object_type);
+            let circle_data = obj.circle_data.as_ref().unwrap();
+            let circle = graphics::Mesh::new_circle(
+                ctx,
+                graphics::DrawMode::fill(),
+                na::Point2::new(0.0, 0.0),
+                circle_data.radius * SCREEN_SIZE_X,
+                0.1,
+                circle_data.color,
+            )?;
+
+            graphics::draw(
+                ctx,
+                &circle,
+                (na::Point2::new(
+                    obj.transform.pos_x * SCREEN_SIZE_X,
+                    obj.transform.pos_y * SCREEN_SIZE_Y,
+                ),),
+            )?;
+        }
 
         for obj in self.objects.values() {
             match obj.shape {
