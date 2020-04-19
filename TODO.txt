@@ -22,7 +22,8 @@ Polish:
 - Stars: DONE
 - Hold to shoot: DONE
 - Planet: atmosphere: DONE
-- Balance
+- Balance: DONE
+- Impact: Red text
 - Planet clouds
 - Bigger screen?
 - Start screen with instructions
