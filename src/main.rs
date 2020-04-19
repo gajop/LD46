@@ -17,6 +17,9 @@ use rand::{
     Rng,
 };
 
+mod render_util;
+use render_util::*;
+
 const SCREEN_SIZE_X: f32 = 1000.0;
 const SCREEN_SIZE_Y: f32 = 1000.0;
 
@@ -104,6 +107,7 @@ struct GameResources {
     ship_meteor_sound: audio::Source,
     shoot_sound: audio::Source,
     victory_sound: audio::Source,
+    earth_image: graphics::Image,
 }
 
 #[derive(Clone, Debug)]
@@ -146,6 +150,7 @@ enum ObjType {
 struct GameObject {
     id: usize,
     transform: Transform,
+    render_coords: RenderCoords,
 
     // FIXME: there must be a better way...
     object_type: ObjType,
@@ -157,7 +162,7 @@ struct GameObject {
     collidable: bool,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 struct Transform {
     pos_x: f32,
     pos_y: f32,
@@ -165,6 +170,14 @@ struct Transform {
     vel_y: f32,
     acc_x: f32,
     acc_y: f32,
+}
+
+#[derive(Clone, Debug, Default)]
+struct RenderCoords {
+    pos_x: f32,
+    pos_y: f32,
+    vel_x: f32,
+    vel_y: f32,
 }
 
 #[derive(Default, Clone, Debug)]
@@ -187,6 +200,8 @@ impl SaveThePinkSkin {
         let ship_meteor_sound = audio::Source::new(ctx, "/ship-meteor.wav")?;
         let shoot_sound = audio::Source::new(ctx, "/shoot.wav")?;
         let victory_sound = audio::Source::new(ctx, "/victory.wav")?;
+        let mut earth_image = graphics::Image::new(ctx, "/earth.png")?;
+        earth_image.set_wrap(graphics::WrapMode::Tile, graphics::WrapMode::Tile);
 
         let game = SaveThePinkSkin::init(GameResources {
             font,
@@ -200,6 +215,7 @@ impl SaveThePinkSkin {
             ship_meteor_sound,
             shoot_sound,
             victory_sound,
+            earth_image,
         });
 
         Ok(game)
@@ -278,6 +294,7 @@ impl SaveThePinkSkin {
             GameObject {
                 id,
                 transform,
+                render_coords: Default::default(),
                 shape,
                 object_type,
                 circle_data: circle_data,
@@ -328,6 +345,9 @@ impl SaveThePinkSkin {
             }),
             None,
         );
+        let object = self.get_mut(id);
+        object.render_coords.vel_x = 0.0005;
+        object.render_coords.vel_y = 0.0001;
         self.earth_id = Some(id);
     }
 
@@ -944,6 +964,16 @@ fn add_new(game: &mut SaveThePinkSkin, created: Vec<MeteorData>) {
     }
 }
 
+fn object_type_image<'a>(
+    game: &'a SaveThePinkSkin,
+    obj_type: &ObjType,
+) -> Option<&'a graphics::Image> {
+    match obj_type {
+        ObjType::Earth => Some(&game.game_resources.earth_image),
+        _ => None,
+    }
+}
+
 impl EventHandler for SaveThePinkSkin {
     fn update(&mut self, ctx: &mut Context) -> GameResult<()> {
         const TARGET_FPS: u32 = 60;
@@ -1012,6 +1042,12 @@ impl EventHandler for SaveThePinkSkin {
                 } else if transform.pos_y < -size_dist * 1.1 {
                     transform.pos_y = 1.0 + size_dist;
                 }
+            }
+
+            for object in &mut self.objects.values_mut() {
+                let render_coords = &mut object.render_coords;
+                render_coords.pos_x += render_coords.vel_x;
+                render_coords.pos_y += render_coords.vel_y;
             }
 
             let mut to_destroy = vec![];
@@ -1147,6 +1183,7 @@ impl EventHandler for SaveThePinkSkin {
         for obj in self.objects.values() {
             match obj.shape {
                 Shape::Circle => {
+                    let image = object_type_image(self, &obj.object_type);
                     let circle_data = obj.circle_data.as_ref().unwrap();
                     let circle = graphics::Mesh::new_circle(
                         ctx,
@@ -1156,14 +1193,39 @@ impl EventHandler for SaveThePinkSkin {
                         0.1,
                         circle_data.color,
                     )?;
-                    graphics::draw(
-                        ctx,
-                        &circle,
-                        (na::Point2::new(
-                            obj.transform.pos_x * SCREEN_SIZE_X,
-                            obj.transform.pos_y * SCREEN_SIZE_Y,
-                        ),),
-                    )?;
+                    match image {
+                        Some(img) => {
+                            let mesh = build_textured_circle_earth(
+                                ctx,
+                                circle_data.radius * SCREEN_SIZE_X,
+                                250,
+                                Some(img.clone()),
+                                Some(na::Point2::new(
+                                    obj.render_coords.pos_x,
+                                    obj.render_coords.pos_y,
+                                )),
+                                Some(na::Point2::new(0.5, 0.9)),
+                            )?;
+                            graphics::draw(
+                                ctx,
+                                &mesh,
+                                (na::Point2::new(
+                                    obj.transform.pos_x * SCREEN_SIZE_X,
+                                    obj.transform.pos_y * SCREEN_SIZE_Y,
+                                ),),
+                            )?;
+                        }
+                        None => {
+                            graphics::draw(
+                                ctx,
+                                &circle,
+                                (na::Point2::new(
+                                    obj.transform.pos_x * SCREEN_SIZE_X,
+                                    obj.transform.pos_y * SCREEN_SIZE_Y,
+                                ),),
+                            )?;
+                        }
+                    }
                 }
                 _ => {}
             }
