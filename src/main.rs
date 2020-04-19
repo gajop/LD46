@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use std::env;
 use std::path;
 
+use rand::distributions::StandardNormal;
 use rand::prelude::*;
 
 use ggez::audio;
@@ -108,6 +109,8 @@ struct GameResources {
     shoot_sound: audio::Source,
     victory_sound: audio::Source,
     earth_image: graphics::Image,
+    meteor_image: graphics::Image,
+    ship_image: graphics::Image,
 }
 
 #[derive(Clone, Debug)]
@@ -202,6 +205,9 @@ impl SaveThePinkSkin {
         let victory_sound = audio::Source::new(ctx, "/victory.wav")?;
         let mut earth_image = graphics::Image::new(ctx, "/earth.png")?;
         earth_image.set_wrap(graphics::WrapMode::Tile, graphics::WrapMode::Tile);
+        let mut meteor_image = graphics::Image::new(ctx, "/meteor.png")?;
+        meteor_image.set_wrap(graphics::WrapMode::Tile, graphics::WrapMode::Tile);
+        let ship_image = graphics::Image::new(ctx, "/ship.png")?;
 
         let game = SaveThePinkSkin::init(GameResources {
             font,
@@ -216,6 +222,8 @@ impl SaveThePinkSkin {
             shoot_sound,
             victory_sound,
             earth_image,
+            meteor_image,
+            ship_image,
         });
 
         Ok(game)
@@ -970,6 +978,8 @@ fn object_type_image<'a>(
 ) -> Option<&'a graphics::Image> {
     match obj_type {
         ObjType::Earth => Some(&game.game_resources.earth_image),
+        ObjType::Meteor => Some(&game.game_resources.meteor_image),
+        ObjType::Ship => Some(&game.game_resources.ship_image),
         _ => None,
     }
 }
@@ -1195,16 +1205,31 @@ impl EventHandler for SaveThePinkSkin {
                     )?;
                     match image {
                         Some(img) => {
+                            let uv_scale = match obj.object_type {
+                                ObjType::Earth => Some(na::Point2::new(0.5, 0.9)),
+                                ObjType::Meteor => Some(na::Point2::new(
+                                    0.7 * circle_data.radius * 100.0,
+                                    0.7 * circle_data.radius * 100.0,
+                                )),
+                                _ => None,
+                            };
+                            let samples = match obj.object_type {
+                                ObjType::Earth => 500,
+                                ObjType::Meteor => {
+                                    ((circle_data.radius * 100.0 * 50.0) as usize).max(10)
+                                }
+                                _ => 250,
+                            };
                             let mesh = build_textured_circle_earth(
                                 ctx,
                                 circle_data.radius * SCREEN_SIZE_X,
-                                250,
+                                samples,
                                 Some(img.clone()),
                                 Some(na::Point2::new(
                                     obj.render_coords.pos_x,
                                     obj.render_coords.pos_y,
                                 )),
-                                Some(na::Point2::new(0.5, 0.9)),
+                                uv_scale,
                             )?;
                             graphics::draw(
                                 ctx,
