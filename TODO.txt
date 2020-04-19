@@ -2,7 +2,7 @@ Core:
 - Setup ggez: DONE
 - Render an Earth circle and a spaceship circle: DONE
 - Make the spaceship controllable with WASD: DONE
-- Spawn meteors: DONE
+- Spawn meteors: DONEs
 - Add collisions and destruction: DONE
 - Display population: DONE
 - Lose conditions: DONE
@@ -13,6 +13,7 @@ Core:
 - Win condition: DONE
 
 Extra:
+- Make meteors explode on hit: DONE
 - Make earth art
 - Make spaceship art
 - Make meteor art

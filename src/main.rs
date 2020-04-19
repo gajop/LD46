@@ -22,6 +22,8 @@ const SCREEN_SIZE_Y: f32 = 1000.0;
 
 const MAX_ACC_X: f32 = 0.00005;
 const MAX_ACC_Y: f32 = 0.00005;
+const MAX_SPEED_X: f32 = 0.005;
+const MAX_SPEED_Y: f32 = 0.005;
 const ACC_STEP_X: f32 = 0.00001;
 const ACC_STEP_Y: f32 = 0.00001;
 
@@ -33,8 +35,10 @@ const METEOR_SPAWN_INTERVAL: f32 = 0.5;
 const POPULATION_START: f32 = 2500.0;
 const POP_MULTI_FACTOR: f32 = 1.0005;
 const VICTORY_PROGRESS_TICK: f32 = 0.0001;
-const OVERPOP_NUMBER: f32 = 9000.0;
-const OVERPOP_MIN_WARNING_INTERVAL: f32 = 10.0;
+
+const OVERPOP_NUMBER: f32 = 10000.0;
+const OVERPOP_MIN_WARNING_INTERVAL: f32 = 30.0;
+const OVERPOP_WARNING_TTL: f32 = 400.0;
 
 fn main() -> GameResult {
     let resource_dir = if let Ok(manifest_dir) = env::var("CARGO_MANIFEST_DIR") {
@@ -242,7 +246,7 @@ impl SaveThePinkSkin {
         self.victory_result = None;
         self.text_population_id = None;
         self.text_spaceship_hp_id = None;
-        self.population_million = 5000.0;
+        self.population_million = POPULATION_START;
         self.spaceship_hp = 100.0;
         self.victory_progress = 0.0;
         self.next_overpop_warning = 0.0;
@@ -282,7 +286,6 @@ impl SaveThePinkSkin {
                 collidable: true,
             },
         );
-        println!("add object: {}", id);
         id
     }
 
@@ -354,7 +357,7 @@ impl SaveThePinkSkin {
     fn add_text_spaceship_hp(&mut self) {
         let id = self.make_object(
             Transform {
-                pos_x: 0.7,
+                pos_x: 0.4,
                 pos_y: 1.0 - 34.0 / SCREEN_SIZE_Y,
                 vel_x: 0.0,
                 vel_y: 0.0,
@@ -490,7 +493,7 @@ impl SaveThePinkSkin {
             }),
         );
         let object = self.get_mut(id);
-        object.ttl = Some(600.0);
+        object.ttl = Some(OVERPOP_WARNING_TTL);
         self.get_mut(id).collidable = false;
     }
 
@@ -561,7 +564,6 @@ impl SaveThePinkSkin {
     }
 
     fn remove_object(&mut self, id: usize) {
-        println!("Removed: {}", id);
         self.objects.remove(&id);
         if self.spaceship_id == Some(id) {
             self.spaceship_id = None;
@@ -665,17 +667,26 @@ struct Collision {
 
 fn find_collisions(game: &SaveThePinkSkin) -> Vec<Collision> {
     let mut collisions = Vec::<Collision>::new();
-    for obj1 in game.objects.values() {
-        for obj2 in game.objects.values() {
-            if obj1.id == obj2.id {
-                continue;
-            }
+    let mut iter1 = game.objects.values();
+    loop {
+        match iter1.next() {
+            Some(obj1) => {
+                let iter2 = iter1.clone();
+                for obj2 in iter2 {
+                    if obj1.id == obj2.id {
+                        continue;
+                    }
 
-            if obj1.collidable && obj2.collidable && dist_object(&obj1, &obj2) <= 0.0 {
-                collisions.push(Collision {
-                    first: obj1.id,
-                    second: obj2.id,
-                });
+                    if obj1.collidable && obj2.collidable && dist_object(&obj1, &obj2) <= 0.0 {
+                        collisions.push(Collision {
+                            first: obj1.id,
+                            second: obj2.id,
+                        });
+                    }
+                }
+            }
+            None => {
+                break;
             }
         }
     }
@@ -733,7 +744,6 @@ fn process_collisions(game: &mut SaveThePinkSkin, collisions: &Vec<Collision>) -
     for collision in collisions {
         let first_type = game.get(collision.first).object_type.clone();
         let second_type = game.get(collision.second).object_type.clone();
-        println!("{:?} x {:?}", first_type, second_type);
         match (&first_type, &second_type) {
             (ObjType::Ship, ObjType::Earth) | (ObjType::Earth, ObjType::Ship) => {
                 results.ship_damage = 1000.0;
@@ -777,9 +787,47 @@ fn process_collisions(game: &mut SaveThePinkSkin, collisions: &Vec<Collision>) -
                 } else {
                     collision.second
                 };
+
+                let meteor = game.objects.get(&collider).unwrap();
+                let transform = &meteor.transform;
+                let radius_ratio: f32 = game.rng.gen_range(0.2, 0.5);
+                let radius = meteor.circle_data.as_ref().unwrap().radius * radius_ratio;
+                let vel_x = gen_safe_range(
+                    &mut game.rng,
+                    -transform.vel_x,
+                    -transform.vel_x / radius_ratio,
+                );
+                let vel_y = gen_safe_range(
+                    &mut game.rng,
+                    -transform.vel_y,
+                    -transform.vel_y / radius_ratio,
+                );
+                const MAX_GENERATED_VELOCITY: f32 = 0.001;
+                let meteor = MeteorData {
+                    transform: Transform {
+                        pos_x: transform.pos_x,
+                        pos_y: transform.pos_y,
+                        vel_x: vel_x.abs().min(MAX_GENERATED_VELOCITY) * vel_y.signum(),
+                        vel_y: vel_y.abs().min(MAX_GENERATED_VELOCITY) * vel_x.signum(),
+                        acc_x: 0.0,
+                        acc_y: 0.0,
+                    },
+                    radius: radius,
+                };
+                if meteor.radius > METEOR_DESTROY_RADIUS
+                    && meteor.transform.pos_x.abs() > 0.02
+                    && meteor.transform.pos_x.abs() < 0.98
+                    && meteor.transform.pos_y.abs() > 0.02
+                    && meteor.transform.pos_y.abs() < 0.98
+                {
+                    println!("{} X {}", collision.first, collision.second);
+                    println!("add from collision: {}", meteor.radius);
+                    results.created.push(meteor);
+                }
+                let _ = game.game_resources.meteor_explosion_sound.play();
+
                 destroyed_unique.insert(collision.first);
                 destroyed_unique.insert(collision.second);
-                let _ = game.game_resources.meteor_explosion_sound.play();
             }
             (ObjType::Meteor, ObjType::Meteor) => {
                 let m1 = game.objects.get(&collision.first).unwrap();
@@ -795,16 +843,16 @@ fn process_collisions(game: &mut SaveThePinkSkin, collisions: &Vec<Collision>) -
 
                 const MAX_GENERATED_VELOCITY: f32 = 0.001;
 
-                let vel_x = gen_safe_range(&mut game.rng, -t1.vel_x, -t1.vel_x / radius_ratio);
-                let vel_y = gen_safe_range(&mut game.rng, -t1.vel_y, -t1.vel_y / radius_ratio);
+                let vel_x1 = gen_safe_range(&mut game.rng, -t1.vel_x, -t1.vel_x / radius_ratio);
+                let vel_y1 = gen_safe_range(&mut game.rng, -t1.vel_y, -t1.vel_y / radius_ratio);
                 let meteor = MeteorData {
                     transform: Transform {
                         // pos_x: gen_safe_range(&mut game.rng, t1.pos_x, t1.pos_x + dx),
                         // pos_y: gen_safe_range(&mut game.rng, t1.pos_y, t1.pos_y + dy),
                         pos_x: t1.pos_x,
                         pos_y: t1.pos_y,
-                        vel_x: vel_x.abs().min(MAX_GENERATED_VELOCITY) * vel_y.signum(),
-                        vel_y: vel_y.abs().min(MAX_GENERATED_VELOCITY) * vel_x.signum(),
+                        vel_x: vel_x1.abs().min(MAX_GENERATED_VELOCITY) * vel_y1.signum(),
+                        vel_y: vel_y1.abs().min(MAX_GENERATED_VELOCITY) * vel_x1.signum(),
                         acc_x: 0.0,
                         acc_y: 0.0,
                     },
@@ -819,18 +867,24 @@ fn process_collisions(game: &mut SaveThePinkSkin, collisions: &Vec<Collision>) -
                     results.created.push(meteor);
                 }
 
-                // let meteor = MeteorData {
-                //     transform: Transform {
-                //         pos_x: gen_safe_range(&mut game.rng, t2.pos_x, t2.pos_x - dx),
-                //         pos_y: gen_safe_range(&mut game.rng, t2.pos_y, t2.pos_y - dy),
-                //         vel_x: gen_safe_range(&mut game.rng, -t2.vel_x, -t2.vel_x * radius_ratio),
-                //         vel_y: gen_safe_range(&mut game.rng, -t2.vel_y, -t2.vel_y * radius_ratio),
-                //         acc_x: 0.0,
-                //         acc_y: 0.0,
-                //     },
-                //     radius: r2 * 0.7,
-                // };
-                // results.created.push(meteor);
+                let vel2_x = gen_safe_range(&mut game.rng, -t1.vel_x, -t2.vel_x / radius_ratio);
+                let vel2_y = gen_safe_range(&mut game.rng, -t1.vel_y, -t2.vel_y / radius_ratio);
+                let meteor = MeteorData {
+                    transform: Transform {
+                        // pos_x: gen_safe_range(&mut game.rng, t2.pos_x, t2.pos_x - dx),
+                        // pos_y: gen_safe_range(&mut game.rng, t2.pos_y, t2.pos_y - dy),
+                        // vel_x: gen_safe_range(&mut game.rng, -t2.vel_x, -t2.vel_x * radius_ratio),
+                        // vel_y: gen_safe_range(&mut game.rng, -t2.vel_y, -t2.vel_y * radius_ratio),
+                        pos_x: t2.pos_x,
+                        pos_y: t2.pos_y,
+                        vel_x: vel2_x.abs().min(MAX_GENERATED_VELOCITY) * vel2_y.signum(),
+                        vel_y: vel2_y.abs().min(MAX_GENERATED_VELOCITY) * vel2_x.signum(),
+                        acc_x: 0.0,
+                        acc_y: 0.0,
+                    },
+                    radius: r2 * 0.7,
+                };
+                results.created.push(meteor);
 
                 // const MIN_SPAWN: u32 = 1;
                 // const MAX_SPAWN: u32 = 3;
@@ -931,6 +985,8 @@ impl EventHandler for SaveThePinkSkin {
 
                 spaceship_tr.acc_x = na::clamp(spaceship_tr.acc_x, -MAX_ACC_X, MAX_ACC_X);
                 spaceship_tr.acc_y = na::clamp(spaceship_tr.acc_y, -MAX_ACC_Y, MAX_ACC_Y);
+                spaceship_tr.vel_x = na::clamp(spaceship_tr.vel_x, -MAX_SPEED_X, MAX_SPEED_X);
+                spaceship_tr.vel_y = na::clamp(spaceship_tr.vel_y, -MAX_SPEED_Y, MAX_SPEED_Y);
             }
 
             for object in &mut self.objects.values_mut() {
