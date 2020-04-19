@@ -364,7 +364,7 @@ impl SaveThePinkSkin {
             ObjType::Ship,
             Shape::Circle,
             Some(CircleData {
-                radius: 0.01,
+                radius: 0.02,
                 color: graphics::Color::new(0.5, 0.5, 0.7, 1.0),
             }),
             None,
@@ -541,7 +541,9 @@ impl SaveThePinkSkin {
             Some(GameVictoryResult::EveryoneDead) => "Catastrophic event.",
             Some(GameVictoryResult::OverPopulation) => "Overpopulation:\nFamine and War.",
             Some(GameVictoryResult::ShipDestroyed) => "You have died.",
-            Some(GameVictoryResult::Victory) => "Nursery finished.\nReady for space travel.",
+            Some(GameVictoryResult::Victory) => {
+                "Nursery finished.\nReady for space travel.\n\n\n Thanks for playing!"
+            }
             None => "Well that didn't work",
         };
         let end_text_full = match self.victory_result {
