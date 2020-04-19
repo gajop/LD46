@@ -5,17 +5,15 @@ Core:
 - Spawn meteors: DONE
 - Add collisions and destruction: DONE
 - Display population: DONE
-- Add lose conditions: DONE
-- Add restart: DONE
-- Add meteor destruction: DONE
-- Add pew pew beam: DONE
-- Add basic sounds: DONE
-- Win condition: when we reach some time and humanity "develops" to stand on its own?
+- Lose conditions: DONE
+- Restart: DONE
+- Meteor destruction: DONE
+- Pew pew beam: DONE
+- Basic sounds: DONE
+- Win condition:
 - Add menu
 
 Extra:
-- Make a tractor beam for the spaceship to control meteors
-- Add physics
 - Make earth art
 - Make spaceship art
 - Make meteor art

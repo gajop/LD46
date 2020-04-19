@@ -20,6 +20,22 @@ use rand::{
 const SCREEN_SIZE_X: f32 = 1000.0;
 const SCREEN_SIZE_Y: f32 = 1000.0;
 
+const MAX_ACC_X: f32 = 0.00005;
+const MAX_ACC_Y: f32 = 0.00005;
+const ACC_STEP_X: f32 = 0.00001;
+const ACC_STEP_Y: f32 = 0.00001;
+
+const METEOR_MAX_SIZE: f32 = 0.02;
+const METEOR_MIN_SIZE: f32 = 0.007;
+const METEOR_DESTROY_RADIUS: f32 = 0.001;
+const METEOR_SPAWN_INTERVAL: f32 = 0.5;
+
+const POPULATION_START: f32 = 2500.0;
+const POP_MULTI_FACTOR: f32 = 1.0005;
+const VICTORY_PROGRESS_TICK: f32 = 0.0001;
+const OVERPOP_NUMBER: f32 = 9000.0;
+const OVERPOP_MIN_WARNING_INTERVAL: f32 = 10.0;
+
 fn main() -> GameResult {
     let resource_dir = if let Ok(manifest_dir) = env::var("CARGO_MANIFEST_DIR") {
         let mut path = path::PathBuf::from(manifest_dir);
@@ -64,8 +80,12 @@ struct SaveThePinkSkin {
     victory_result: Option<GameVictoryResult>,
     text_population_id: Option<usize>,
     text_spaceship_hp_id: Option<usize>,
+    text_victory_progress_id: Option<usize>,
     population_million: f32,
+    victory_progress: f32,
     spaceship_hp: f32,
+    next_overpop_warning: f32,
+    next_overpop_warning_enabled: bool,
 }
 
 struct GameResources {
@@ -75,6 +95,8 @@ struct GameResources {
     earth_end_sound: audio::Source,
     meteor_bounce_sound: audio::Source,
     meteor_explosion_sound: audio::Source,
+    overpopulation_warning_sound: audio::Source,
+    overpopulation_end_sound: audio::Source,
     ship_meteor_sound: audio::Source,
     shoot_sound: audio::Source,
     victory_sound: audio::Source,
@@ -146,14 +168,6 @@ struct Controls {
     left_right: Option<Direction>,
     up_down: Option<Direction>,
 }
-const MAX_ACC_X: f32 = 0.00005;
-const MAX_ACC_Y: f32 = 0.00005;
-const ACC_STEP_X: f32 = 0.00001;
-const ACC_STEP_Y: f32 = 0.00001;
-
-const METEOR_MAX_SIZE: f32 = 0.02;
-const METEOR_MIN_SIZE: f32 = 0.007;
-const METEOR_DESTROY_RADIUS: f32 = 0.001;
 
 impl SaveThePinkSkin {
     pub fn new(ctx: &mut Context) -> GameResult<SaveThePinkSkin> {
@@ -164,6 +178,8 @@ impl SaveThePinkSkin {
         let earth_end_sound = audio::Source::new(ctx, "/earth-end.wav")?;
         let meteor_bounce_sound = audio::Source::new(ctx, "/meteor-bounce.wav")?;
         let meteor_explosion_sound = audio::Source::new(ctx, "/meteor-explosion.wav")?;
+        let overpopulation_warning_sound = audio::Source::new(ctx, "/overpopulation-warning.wav")?;
+        let overpopulation_end_sound = audio::Source::new(ctx, "/overpop-end.wav")?;
         let ship_meteor_sound = audio::Source::new(ctx, "/ship-meteor.wav")?;
         let shoot_sound = audio::Source::new(ctx, "/shoot.wav")?;
         let victory_sound = audio::Source::new(ctx, "/victory.wav")?;
@@ -175,6 +191,8 @@ impl SaveThePinkSkin {
             earth_end_sound,
             meteor_bounce_sound,
             meteor_explosion_sound,
+            overpopulation_warning_sound,
+            overpopulation_end_sound,
             ship_meteor_sound,
             shoot_sound,
             victory_sound,
@@ -196,13 +214,18 @@ impl SaveThePinkSkin {
             victory_result: None,
             text_population_id: None,
             text_spaceship_hp_id: None,
-            population_million: 5000.0,
+            text_victory_progress_id: None,
+            population_million: POPULATION_START,
             spaceship_hp: 100.0,
+            victory_progress: 0.0,
+            next_overpop_warning: 0.0,
+            next_overpop_warning_enabled: true,
         };
         game.add_spaceship();
         game.add_earth();
         game.add_text_population();
         game.add_text_spaceship_hp();
+        game.add_text_victory_progress();
 
         game
     }
@@ -221,10 +244,14 @@ impl SaveThePinkSkin {
         self.text_spaceship_hp_id = None;
         self.population_million = 5000.0;
         self.spaceship_hp = 100.0;
+        self.victory_progress = 0.0;
+        self.next_overpop_warning = 0.0;
+        self.next_overpop_warning_enabled = true;
         self.add_spaceship();
         self.add_earth();
         self.add_text_population();
         self.add_text_spaceship_hp();
+        self.add_text_victory_progress();
     }
 
     fn make_object(
@@ -350,12 +377,15 @@ impl SaveThePinkSkin {
     fn add_text_victory_result(&mut self) {
         let end_text = match self.victory_result {
             Some(GameVictoryResult::EveryoneDead) => "Catastrophic event.",
-            Some(GameVictoryResult::OverPopulation) => "Overpopulation the extinction.",
+            Some(GameVictoryResult::OverPopulation) => "Overpopulation:\nFamine and War.",
             Some(GameVictoryResult::ShipDestroyed) => "You have died.",
-            Some(GameVictoryResult::Victory) => "Nursery finished.",
+            Some(GameVictoryResult::Victory) => "Nursery finished.\nReady for space travel.",
             None => "Well that didn't work",
         };
-        let end_text_full = format!("{}\n{}", end_text, "R to Restart");
+        let end_text_full = match self.victory_result {
+            Some(GameVictoryResult::Victory) => format!("{}", end_text),
+            _ => format!("{}\n{}", end_text, "R to Restart"),
+        };
         let id = self.make_object(
             Transform {
                 pos_x: 0.35,
@@ -374,6 +404,93 @@ impl SaveThePinkSkin {
                 font_size: 34.0,
             }),
         );
+        self.get_mut(id).collidable = false;
+    }
+
+    fn add_text_victory_progress(&mut self) {
+        let id = self.make_object(
+            Transform {
+                pos_x: 0.2,
+                pos_y: 0.0 + 48.0 / SCREEN_SIZE_Y,
+                vel_x: 0.0,
+                vel_y: 0.0,
+                acc_x: 0.0,
+                acc_y: 0.0,
+            },
+            ObjType::UI,
+            Shape::Text,
+            None,
+            Some(TextData {
+                text: graphics::Text::default(),
+                expiration_time: None,
+                font_size: 21.0,
+            }),
+        );
+        self.get_mut(id).collidable = false;
+        self.text_victory_progress_id = Some(id);
+    }
+
+    fn add_meteor_impact_text(&mut self, pos_x: f32, pos_y: f32, damage: f32) {
+        let id = self.make_object(
+            Transform {
+                pos_x: pos_x - 0.1,
+                pos_y: pos_y - 13.0 / SCREEN_SIZE_Y,
+                vel_x: 0.0,
+                vel_y: -0.00001,
+                acc_x: 0.0,
+                acc_y: 0.0,
+            },
+            ObjType::UI,
+            Shape::Text,
+            None,
+            Some(TextData {
+                text: graphics::Text::new((
+                    format!("{} dead", population_to_string(damage)),
+                    self.game_resources.font,
+                    13.0,
+                )),
+                expiration_time: None,
+                font_size: 13.0,
+            }),
+        );
+        let object = self.get_mut(id);
+        object.ttl = Some(300.0);
+        self.get_mut(id).collidable = false;
+    }
+
+    fn maybe_make_overpopulation_warning(&mut self, time: f32) {
+        if time < self.next_overpop_warning || !self.next_overpop_warning_enabled {
+            return;
+        }
+
+        self.next_overpop_warning_enabled = false;
+
+        let _ = self.game_resources.overpopulation_warning_sound.play();
+        self.next_overpop_warning += OVERPOP_MIN_WARNING_INTERVAL;
+        let id = self.make_object(
+            Transform {
+                pos_x: 0.25,
+                pos_y: 0.3,
+                vel_x: 0.0,
+                vel_y: -0.00001,
+                acc_x: 0.0,
+                acc_y: 0.0,
+            },
+            ObjType::UI,
+            Shape::Text,
+            None,
+            Some(TextData {
+                text: graphics::Text::new((
+                    "Overpopulation imminent",
+                    self.game_resources.font,
+                    32.0,
+                )),
+                expiration_time: None,
+                font_size: 32.0,
+            }),
+        );
+        let object = self.get_mut(id);
+        object.ttl = Some(600.0);
         self.get_mut(id).collidable = false;
     }
 
@@ -588,6 +705,22 @@ fn gen_safe_range(rng: &mut ThreadRng, first: f32, second: f32) -> f32 {
     }
 }
 
+fn radius_to_earth_damage(radius: f32) -> f32 {
+    radius * radius * 100.0 * 100.0 * 13.0 * 100.0
+}
+
+fn radius_to_ship_damage(radius: f32) -> f32 {
+    radius * radius * 100.0 * 100.0 * 13.0 * 2.0
+}
+
+fn population_to_string(population: f32) -> String {
+    if population > 400.0 {
+        format!("{:.1}B", population / 1000.0)
+    } else {
+        format!("{:.0}M", population)
+    }
+}
+
 fn process_collisions(game: &mut SaveThePinkSkin, collisions: &Vec<Collision>) -> CollisionResults {
     let mut results = CollisionResults {
         created: Vec::new(),
@@ -612,7 +745,7 @@ fn process_collisions(game: &mut SaveThePinkSkin, collisions: &Vec<Collision>) -
                     collision.second
                 };
                 results.ship_damage +=
-                    game.get(collider).circle_data.as_ref().unwrap().radius * 1000.0;
+                    radius_to_ship_damage(game.get(collider).circle_data.as_ref().unwrap().radius);
                 destroyed_unique.insert(collider);
                 let _ = game.game_resources.ship_meteor_sound.play();
             }
@@ -622,10 +755,15 @@ fn process_collisions(game: &mut SaveThePinkSkin, collisions: &Vec<Collision>) -
                 } else {
                     collision.second
                 };
-                results.population_damage +=
-                    game.get(collider).circle_data.as_ref().unwrap().radius * 1000.0;
+                let collider_object = game.get(collider);
+                let pos_x = collider_object.transform.pos_x;
+                let pos_y = collider_object.transform.pos_y;
+                let damage =
+                    radius_to_earth_damage(game.get(collider).circle_data.as_ref().unwrap().radius);
+                results.population_damage += damage;
                 destroyed_unique.insert(collider);
                 let _ = game.game_resources.earth_meteor_sound.play();
+                game.add_meteor_impact_text(pos_x, pos_y, damage);
             }
             (ObjType::Earth, ObjType::Projectile) => {
                 destroyed_unique.insert(collision.second);
@@ -755,17 +893,17 @@ fn add_new(game: &mut SaveThePinkSkin, created: Vec<MeteorData>) {
 impl EventHandler for SaveThePinkSkin {
     fn update(&mut self, ctx: &mut Context) -> GameResult<()> {
         const TARGET_FPS: u32 = 60;
-        const SPAWN_INTERVAL: f32 = 0.5;
 
         let time: f32 = ggez::timer::time_since_start(&ctx).as_secs() as f32;
 
         if let Some(next_meteor_spawn) = self.next_meteor_spawn {
             while time > self.next_meteor_spawn.unwrap() {
                 self.generate_meteor();
-                self.next_meteor_spawn = Some(self.next_meteor_spawn.unwrap() + SPAWN_INTERVAL);
+                self.next_meteor_spawn =
+                    Some(self.next_meteor_spawn.unwrap() + METEOR_SPAWN_INTERVAL);
             }
         } else {
-            self.next_meteor_spawn = Some(time + SPAWN_INTERVAL);
+            self.next_meteor_spawn = Some(time + METEOR_SPAWN_INTERVAL);
         }
 
         while ggez::timer::check_update_time(ctx, TARGET_FPS) {
@@ -823,7 +961,6 @@ impl EventHandler for SaveThePinkSkin {
             let mut to_destroy = vec![];
             for object in &mut self.objects.values_mut() {
                 if let Some(ttl) = object.ttl {
-                    println!("ttl: {}", ttl);
                     object.ttl = Some(ttl - 1.0);
                     if object.ttl <= Some(0.0) {
                         to_destroy.push(object.id);
@@ -857,12 +994,13 @@ impl EventHandler for SaveThePinkSkin {
             let collisions = find_collisions(self);
             let results = process_collisions(self, &collisions);
             self.spaceship_hp -= results.ship_damage;
-            const IMPACT_POP_DAMAGE_SCALE: f32 = 100.0;
-            self.population_million -= results.population_damage * IMPACT_POP_DAMAGE_SCALE;
+            self.population_million -= results.population_damage;
             cleanup_destroyed(self, &results.destroyed_ids);
             add_new(self, results.created);
 
-            const OVERPOP_NUMBER: f32 = 9000.0;
+            self.population_million *= POP_MULTI_FACTOR;
+            self.victory_progress += VICTORY_PROGRESS_TICK;
+
             match self.victory_result {
                 None => {
                     let mut finished = true;
@@ -877,6 +1015,10 @@ impl EventHandler for SaveThePinkSkin {
                         }
                     } else if self.population_million >= OVERPOP_NUMBER {
                         self.victory_result = Some(GameVictoryResult::OverPopulation);
+                        let _ = self.game_resources.overpopulation_end_sound.play();
+                    } else if self.victory_progress >= 1.0 {
+                        self.victory_result = Some(GameVictoryResult::Victory);
+                        let _ = self.game_resources.victory_sound.play();
                     } else {
                         finished = false;
                     }
@@ -887,11 +1029,26 @@ impl EventHandler for SaveThePinkSkin {
                 _ => {}
             }
 
+            if self.population_million > 7000.0 {
+                self.maybe_make_overpopulation_warning(time);
+            } else {
+                self.next_overpop_warning_enabled = true;
+            }
+
             self.spaceship_hp = self.spaceship_hp.max(0.0);
             self.population_million = self.population_million.max(0.0);
+            self.victory_progress = self.victory_progress.min(1.0);
 
             if let Some(text_population_id) = self.text_population_id {
-                let text_str = format!("Population: {:.2}M", self.population_million);
+                let text_str = format!(
+                    "Population: {}",
+                    population_to_string(self.population_million)
+                );
+                let text_str = if self.population_million > 7000.0 {
+                    format!("{} (!)", text_str)
+                } else {
+                    text_str
+                };
                 let object = self.objects.get_mut(&text_population_id).unwrap();
                 if let Some(text_data) = &mut object.text_data {
                     text_data.text = graphics::Text::new((
@@ -904,6 +1061,17 @@ impl EventHandler for SaveThePinkSkin {
             if let Some(text_spaceship_hp_id) = self.text_spaceship_hp_id {
                 let text_str = format!("HP: {:.0}", self.spaceship_hp);
                 let object = self.objects.get_mut(&text_spaceship_hp_id).unwrap();
+                if let Some(text_data) = &mut object.text_data {
+                    text_data.text = graphics::Text::new((
+                        text_str,
+                        self.game_resources.font,
+                        text_data.font_size,
+                    ));
+                }
+            }
+            if let Some(text_victory_progress_id) = self.text_victory_progress_id {
+                let text_str = format!("Space Age Progress: {:.0}%", 100.0 * self.victory_progress);
+                let object = self.objects.get_mut(&text_victory_progress_id).unwrap();
                 if let Some(text_data) = &mut object.text_data {
                     text_data.text = graphics::Text::new((
                         text_str,
