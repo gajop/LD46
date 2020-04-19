@@ -147,6 +147,7 @@ struct TextData {
     text: graphics::Text,
     expiration_time: Option<i32>,
     font_size: f32,
+    color: graphics::Color,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -441,6 +442,7 @@ impl SaveThePinkSkin {
                 text: graphics::Text::default(),
                 expiration_time: None,
                 font_size: 48.0,
+                color: graphics::WHITE,
             }),
         );
         self.get_mut(id).collidable = false;
@@ -464,6 +466,7 @@ impl SaveThePinkSkin {
                 text: graphics::Text::default(),
                 expiration_time: None,
                 font_size: 34.0,
+                color: graphics::WHITE,
             }),
         );
         self.get_mut(id).collidable = false;
@@ -498,6 +501,7 @@ impl SaveThePinkSkin {
                 text: graphics::Text::new((end_text_full, self.game_resources.font, 34.0)),
                 expiration_time: None,
                 font_size: 34.0,
+                color: graphics::WHITE,
             }),
         );
         self.get_mut(id).collidable = false;
@@ -520,6 +524,7 @@ impl SaveThePinkSkin {
                 text: graphics::Text::default(),
                 expiration_time: None,
                 font_size: 21.0,
+                color: graphics::WHITE,
             }),
         );
         self.get_mut(id).collidable = false;
@@ -527,6 +532,10 @@ impl SaveThePinkSkin {
     }
 
     fn add_meteor_impact_text(&mut self, pos_x: f32, pos_y: f32, damage: f32) {
+        let damage = self.population_million.min(damage);
+        if damage == 0.0 {
+            return;
+        }
         let id = self.make_object(
             Transform {
                 pos_x: pos_x - 0.1,
@@ -547,6 +556,7 @@ impl SaveThePinkSkin {
                 )),
                 expiration_time: None,
                 font_size: 13.0,
+                color: graphics::Color::new(1.0, 0.2, 0.2, 1.0),
             }),
         );
         let object = self.get_mut(id);
@@ -583,6 +593,7 @@ impl SaveThePinkSkin {
                 )),
                 expiration_time: None,
                 font_size: 32.0,
+                color: graphics::Color::new(1.0, 0.2, 0.2, 1.0),
             }),
         );
         let object = self.get_mut(id);
@@ -1364,10 +1375,13 @@ impl EventHandler for SaveThePinkSkin {
                     graphics::draw(
                         ctx,
                         &text_data.text,
-                        (na::Point2::new(
-                            obj.transform.pos_x * SCREEN_SIZE_X,
-                            obj.transform.pos_y * SCREEN_SIZE_Y,
-                        ),),
+                        (
+                            na::Point2::new(
+                                obj.transform.pos_x * SCREEN_SIZE_X,
+                                obj.transform.pos_y * SCREEN_SIZE_Y,
+                            ),
+                            text_data.color,
+                        ),
                     )?;
                 }
                 _ => {}

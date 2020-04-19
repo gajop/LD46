@@ -23,8 +23,10 @@ Polish:
 - Hold to shoot: DONE
 - Planet: atmosphere: DONE
 - Balance: DONE
-- Impact: Red text
+- Impact: Red text: DONE
 - Planet clouds
+- Blink eye
+- More unique meteors
 - Bigger screen?
 - Start screen with instructions
 - Music?
