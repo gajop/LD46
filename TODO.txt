@@ -30,7 +30,7 @@ Polish:
 - Improve ship: DONE
 - More unique meteors: DONE
 - Start screen with instructions: DONE
-- Prepare release:
+- Prepare release: DONE
 
 After compo?
 - Optimizations
