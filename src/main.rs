@@ -371,6 +371,26 @@ impl SaveThePinkSkin {
         object.render_coords.vel_x = 0.0005;
         object.render_coords.vel_y = 0.0001;
         self.earth_id = Some(id);
+
+        let id = self.make_object(
+            Transform {
+                pos_x: 0.5,
+                pos_y: 0.5,
+                vel_x: 0.0,
+                vel_y: 0.0,
+                acc_x: 0.0,
+                acc_y: 0.0,
+            },
+            ObjType::UI,
+            Shape::Circle,
+            Some(CircleData {
+                radius: 0.105,
+                color: graphics::Color::new(0.15, 0.15, 0.3, 0.3),
+            }),
+            None,
+        );
+        let object = self.get_mut(id);
+        object.collidable = false;
     }
 
     fn add_stars(&mut self) {

@@ -96,7 +96,8 @@ pub fn build_textured_circle_earth(
 	let v = angle.cos();
 	let x = radius * u;
 	let y = radius * v;
-	let light = 1.0 - u;
+	// let light = 1.0 - u;
+	let light = 1.0;
 
 	triangle_verts.push(graphics::Vertex {
 		pos: [x, y],
