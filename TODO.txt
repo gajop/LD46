@@ -10,13 +10,13 @@ Core:
 - Meteor destruction: DONE
 - Pew pew beam: DONE
 - Basic sounds: DONE
-- Win condition:
-- Add menu
+- Win condition: DONE
 
 Extra:
 - Make earth art
 - Make spaceship art
 - Make meteor art
+- Add menu
 
 Polish:
 - ?
