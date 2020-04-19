@@ -60,6 +60,7 @@ fn main() -> GameResult {
 
     // Make a Context.
     let (mut ctx, mut event_loop) = ContextBuilder::new("save_the_pink_skins", "gajop")
+        .window_setup(conf::WindowSetup::default().title("Save The Pink Skins!"))
         .window_mode(conf::WindowMode {
             width: 768.0,
             height: 768.0,
@@ -76,12 +77,8 @@ fn main() -> GameResult {
         .build()
         .expect("Failed to create create ggez context. Please report this error");
 
-    // Create an instance of your event handler.
-    // Usually, you should provide it with the Context object to
-    // use when setting your game up.
     let mut my_game = SaveThePinkSkin::new(&mut ctx)?;
 
-    // Run!
     match event::run(&mut ctx, &mut event_loop, &mut my_game) {
         Ok(_) => println!("Exited cleanly."),
         Err(e) => println!("Error occured: {}", e),
@@ -93,6 +90,7 @@ fn main() -> GameResult {
 struct SaveThePinkSkin {
     // spaceship: GameObject,
     // earth: GameObject,
+    started: bool,
     id_generator: usize,
     objects: BTreeMap<usize, GameObject>,
     spaceship_id: Option<usize>,
@@ -135,6 +133,7 @@ struct GameResources {
     meteor_image: graphics::Image,
     ship_image: graphics::Image,
     clouds_image: graphics::Image,
+    instructions_image: graphics::Image,
 }
 
 #[derive(Clone, Debug)]
@@ -238,6 +237,7 @@ impl SaveThePinkSkin {
         let ship_image = graphics::Image::new(ctx, "/ship.png")?;
         let mut clouds_image = graphics::Image::new(ctx, "/clouds.png")?;
         clouds_image.set_wrap(graphics::WrapMode::Tile, graphics::WrapMode::Tile);
+        let instructions_image = graphics::Image::new(ctx, "/instructions.png")?;
 
         let game = SaveThePinkSkin::init(GameResources {
             font,
@@ -255,6 +255,7 @@ impl SaveThePinkSkin {
             meteor_image,
             ship_image,
             clouds_image,
+            instructions_image,
         });
 
         Ok(game)
@@ -262,6 +263,7 @@ impl SaveThePinkSkin {
 
     fn init(game_resources: GameResources) -> SaveThePinkSkin {
         let mut game = SaveThePinkSkin {
+            started: false,
             id_generator: 0,
             objects: BTreeMap::new(),
             controls: Default::default(),
@@ -844,28 +846,21 @@ struct Collision {
 fn find_collisions(game: &SaveThePinkSkin) -> Vec<Collision> {
     let mut collisions = Vec::<Collision>::new();
     let mut iter1 = game.objects.values();
-    loop {
-        match iter1.next() {
-            Some(obj1) => {
-                if !obj1.collidable {
-                    continue;
-                }
-                let iter2 = iter1.clone();
-                for obj2 in iter2 {
-                    if obj1.id == obj2.id {
-                        continue;
-                    }
-
-                    if obj2.collidable && dist_object(&obj1, &obj2) <= 0.0 {
-                        collisions.push(Collision {
-                            first: obj1.id,
-                            second: obj2.id,
-                        });
-                    }
-                }
+    while let Some(obj1) = iter1.next() {
+        if !obj1.collidable {
+            continue;
+        }
+        let iter2 = iter1.clone();
+        for obj2 in iter2 {
+            if obj1.id == obj2.id {
+                continue;
             }
-            None => {
-                break;
+
+            if obj2.collidable && dist_object(&obj1, &obj2) <= 0.0 {
+                collisions.push(Collision {
+                    first: obj1.id,
+                    second: obj2.id,
+                });
             }
         }
     }
@@ -999,8 +994,6 @@ fn process_collisions(game: &mut SaveThePinkSkin, collisions: &Vec<Collision>) -
                     && meteor.transform.pos_y.abs() > 0.02
                     && meteor.transform.pos_y.abs() < 0.98
                 {
-                    println!("{} X {}", collision.first, collision.second);
-                    println!("add from collision: {}", meteor.radius);
                     results.created.push(meteor);
                 }
                 let _ = game.game_resources.meteor_explosion_sound.play();
@@ -1094,7 +1087,6 @@ fn process_collisions(game: &mut SaveThePinkSkin, collisions: &Vec<Collision>) -
                 //     }
                 // }
                 let _ = game.game_resources.meteor_bounce_sound.play();
-                println!("Collision: {} x {}", collision.first, collision.second);
                 destroyed_unique.insert(collision.first);
                 destroyed_unique.insert(collision.second);
             }
@@ -1143,6 +1135,10 @@ fn get_decay_size_factor(radius: f32) -> f32 {
 
 impl EventHandler for SaveThePinkSkin {
     fn update(&mut self, ctx: &mut Context) -> GameResult<()> {
+        if !self.started {
+            return Ok(());
+        }
+
         const TARGET_FPS: u32 = 60;
 
         let time: f32 = ggez::timer::time_since_start(&ctx).as_millis() as f32 / 1000.0;
@@ -1354,6 +1350,22 @@ impl EventHandler for SaveThePinkSkin {
     fn draw(&mut self, ctx: &mut Context) -> GameResult<()> {
         graphics::clear(ctx, graphics::BLACK);
 
+        if !self.started {
+            let w = self.game_resources.instructions_image.width();
+            let h = self.game_resources.instructions_image.height();
+            graphics::draw(
+                ctx,
+                &self.game_resources.instructions_image,
+                graphics::DrawParam::new()
+                    .dest(na::Point2::new(self.offset_x, self.offset_y))
+                    .scale(na::Vector2::new(
+                        self.draw_size / (w as f32),
+                        self.draw_size / (h as f32),
+                    )),
+            )?;
+            return graphics::present(ctx);
+        }
+
         for obj in &self.stars {
             let image = object_type_image(self, &obj.object_type);
             let circle_data = obj.circle_data.as_ref().unwrap();
@@ -1508,7 +1520,7 @@ impl EventHandler for SaveThePinkSkin {
     /// key_down_event gets fired when a key gets pressed.
     fn key_down_event(
         &mut self,
-        _ctx: &mut Context,
+        ctx: &mut Context,
         keycode: KeyCode,
         _keymod: KeyMods,
         _repeat: bool,
@@ -1521,6 +1533,12 @@ impl EventHandler for SaveThePinkSkin {
         }
         if keycode == KeyCode::R && self.victory_result.is_some() {
             self.restart();
+        }
+        if keycode == KeyCode::NumpadEnter || keycode == KeyCode::Return {
+            self.started = true;
+        }
+        if keycode == KeyCode::Escape {
+            ggez::event::quit(ctx);
         }
     }
 

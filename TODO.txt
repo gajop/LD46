@@ -29,7 +29,10 @@ Polish:
 - Planet clouds: DONE
 - Improve ship: DONE
 - More unique meteors: DONE
-- Start screen with instructions
+- Start screen with instructions: DONE
+- Prepare release:
+
+After compo?
 - Optimizations
 - Code cleanup
-- Music?
+- Music
