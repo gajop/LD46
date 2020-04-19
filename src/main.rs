@@ -1420,31 +1420,39 @@ impl EventHandler for SaveThePinkSkin {
 
                             let uv_scale = match obj.object_type {
                                 ObjType::Earth => Some(na::Point2::new(0.5, 0.9)),
-                                ObjType::Meteor => Some(na::Point2::new(
-                                    0.7 * circle_data.radius * 100.0,
-                                    0.7 * circle_data.radius * 100.0,
-                                )),
                                 ObjType::Clouds => Some(na::Point2::new(0.25 * 0.8, 0.8)),
                                 _ => None,
                             };
                             let samples = match obj.object_type {
                                 ObjType::Earth => 500,
-                                ObjType::Meteor => {
-                                    ((circle_data.radius * 100.0 * 50.0) as usize).max(10)
-                                }
+                                ObjType::Meteor => 50,
                                 _ => 250,
                             };
-                            let mesh = build_textured_circle_earth(
-                                ctx,
-                                circle_data.radius * self.draw_size,
-                                samples,
-                                Some(img.clone()),
-                                Some(na::Point2::new(
-                                    obj.render_coords.pos_x,
-                                    obj.render_coords.pos_y,
-                                )),
-                                uv_scale,
-                            )?;
+                            let mesh = match obj.object_type {
+                                ObjType::Meteor => build_textured_circle_meteor(
+                                    ctx,
+                                    obj.id,
+                                    circle_data.radius * self.draw_size,
+                                    samples,
+                                    Some(img.clone()),
+                                    Some(na::Point2::new(
+                                        obj.render_coords.pos_x,
+                                        obj.render_coords.pos_y,
+                                    )),
+                                    uv_scale,
+                                )?,
+                                _ => build_textured_circle_earth(
+                                    ctx,
+                                    circle_data.radius * self.draw_size,
+                                    samples,
+                                    Some(img.clone()),
+                                    Some(na::Point2::new(
+                                        obj.render_coords.pos_x,
+                                        obj.render_coords.pos_y,
+                                    )),
+                                    uv_scale,
+                                )?,
+                            };
                             graphics::draw(
                                 ctx,
                                 &mesh,

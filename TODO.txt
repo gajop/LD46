@@ -2,7 +2,7 @@ Core:
 - Setup ggez: DONE
 - Render an Earth circle and a spaceship circle: DONE
 - Make the spaceship controllable with WASD: DONE
-- Spawn meteors: DONEs
+- Spawn meteors: DONE
 - Add collisions and destruction: DONE
 - Display population: DONE
 - Lose conditions: DONE
@@ -27,8 +27,8 @@ Polish:
 - Burning meteors: DONE
 - Bigger screen: DONE
 - Planet clouds: DONE
-- Blink eye
-- More unique meteors
+- Improve ship: DONE
+- More unique meteors: DONE
 - Start screen with instructions
 - Optimizations
 - Code cleanup
