@@ -26,8 +26,10 @@ Polish:
 - Impact: Red text: DONE
 - Burning meteors: DONE
 - Bigger screen: DONE
-- Planet clouds
+- Planet clouds: DONE
 - Blink eye
 - More unique meteors
 - Start screen with instructions
+- Optimizations
+- Code cleanup
 - Music?

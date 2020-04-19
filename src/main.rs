@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::env;
@@ -93,7 +94,7 @@ struct SaveThePinkSkin {
     // spaceship: GameObject,
     // earth: GameObject,
     id_generator: usize,
-    objects: HashMap<usize, GameObject>,
+    objects: BTreeMap<usize, GameObject>,
     spaceship_id: Option<usize>,
     earth_id: Option<usize>,
     controls: Controls,
@@ -133,6 +134,7 @@ struct GameResources {
     earth_image: graphics::Image,
     meteor_image: graphics::Image,
     ship_image: graphics::Image,
+    clouds_image: graphics::Image,
 }
 
 #[derive(Clone, Debug)]
@@ -169,6 +171,8 @@ enum ObjType {
     Earth,
     Meteor,
     Projectile,
+    Clouds,
+    Asthetics,
     UI,
 }
 
@@ -232,6 +236,8 @@ impl SaveThePinkSkin {
         let mut meteor_image = graphics::Image::new(ctx, "/meteor.png")?;
         meteor_image.set_wrap(graphics::WrapMode::Tile, graphics::WrapMode::Tile);
         let ship_image = graphics::Image::new(ctx, "/ship.png")?;
+        let mut clouds_image = graphics::Image::new(ctx, "/clouds.png")?;
+        clouds_image.set_wrap(graphics::WrapMode::Tile, graphics::WrapMode::Tile);
 
         let game = SaveThePinkSkin::init(GameResources {
             font,
@@ -248,6 +254,7 @@ impl SaveThePinkSkin {
             earth_image,
             meteor_image,
             ship_image,
+            clouds_image,
         });
 
         Ok(game)
@@ -256,7 +263,7 @@ impl SaveThePinkSkin {
     fn init(game_resources: GameResources) -> SaveThePinkSkin {
         let mut game = SaveThePinkSkin {
             id_generator: 0,
-            objects: HashMap::new(),
+            objects: BTreeMap::new(),
             controls: Default::default(),
             spaceship_id: None,
             earth_id: None,
@@ -291,7 +298,7 @@ impl SaveThePinkSkin {
     fn restart(&mut self) {
         // *self = SaveThePinkSkin::init(self.game_resources);
         self.id_generator = 0;
-        self.objects = HashMap::new();
+        self.objects = BTreeMap::new();
         self.controls = Default::default();
         self.spaceship_id = None;
         self.earth_id = None;
@@ -384,10 +391,11 @@ impl SaveThePinkSkin {
             None,
         );
         let object = self.get_mut(id);
-        object.render_coords.vel_x = 0.0005;
+        object.render_coords.vel_x = 0.0002;
         object.render_coords.vel_y = 0.0001;
         self.earth_id = Some(id);
 
+        // atmosphere
         let id = self.make_object(
             Transform {
                 pos_x: 0.5,
@@ -397,7 +405,28 @@ impl SaveThePinkSkin {
                 acc_x: 0.0,
                 acc_y: 0.0,
             },
-            ObjType::UI,
+            ObjType::Asthetics,
+            Shape::Circle,
+            Some(CircleData {
+                radius: 0.108,
+                color: graphics::Color::new(0.0, 0.0, 0.0, 0.0),
+            }),
+            None,
+        );
+        let object = self.get_mut(id);
+        object.collidable = false;
+
+        // clouds
+        let id = self.make_object(
+            Transform {
+                pos_x: 0.5,
+                pos_y: 0.5,
+                vel_x: 0.0,
+                vel_y: 0.0,
+                acc_x: 0.0,
+                acc_y: 0.0,
+            },
+            ObjType::Clouds,
             Shape::Circle,
             Some(CircleData {
                 radius: 0.105,
@@ -406,6 +435,8 @@ impl SaveThePinkSkin {
             None,
         );
         let object = self.get_mut(id);
+        object.render_coords.vel_x = 0.0007;
+        object.render_coords.vel_y = -0.0001;
         object.collidable = false;
     }
 
@@ -427,7 +458,7 @@ impl SaveThePinkSkin {
                 },
                 render_coords: Default::default(),
                 shape: Shape::Circle,
-                object_type: ObjType::UI,
+                object_type: ObjType::Asthetics,
                 circle_data: Some(CircleData {
                     radius: self.rng.gen_range(STAR_MIN_SIZE, STAR_MAX_SIZE),
                     color: graphics::Color::new(0.9, 0.9, 0.9, 0.5),
@@ -814,13 +845,16 @@ fn find_collisions(game: &SaveThePinkSkin) -> Vec<Collision> {
     loop {
         match iter1.next() {
             Some(obj1) => {
+                if !obj1.collidable {
+                    continue;
+                }
                 let iter2 = iter1.clone();
                 for obj2 in iter2 {
                     if obj1.id == obj2.id {
                         continue;
                     }
 
-                    if obj1.collidable && obj2.collidable && dist_object(&obj1, &obj2) <= 0.0 {
+                    if obj2.collidable && dist_object(&obj1, &obj2) <= 0.0 {
                         collisions.push(Collision {
                             first: obj1.id,
                             second: obj2.id,
@@ -1095,6 +1129,7 @@ fn object_type_image<'a>(
         ObjType::Earth => Some(&game.game_resources.earth_image),
         ObjType::Meteor => Some(&game.game_resources.meteor_image),
         ObjType::Ship => Some(&game.game_resources.ship_image),
+        ObjType::Clouds => Some(&game.game_resources.clouds_image),
         _ => None,
     }
 }
@@ -1387,6 +1422,7 @@ impl EventHandler for SaveThePinkSkin {
                                     0.7 * circle_data.radius * 100.0,
                                     0.7 * circle_data.radius * 100.0,
                                 )),
+                                ObjType::Clouds => Some(na::Point2::new(0.25 * 0.8, 0.8)),
                                 _ => None,
                             };
                             let samples = match obj.object_type {
