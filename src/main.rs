@@ -48,6 +48,8 @@ const STARS_COUNT: usize = 200;
 const STAR_MIN_SIZE: f32 = 0.0001;
 const STAR_MAX_SIZE: f32 = 0.0005;
 
+const SHOOTING_SPEED: f32 = 0.15;
+
 fn main() -> GameResult {
     let resource_dir = if let Ok(manifest_dir) = env::var("CARGO_MANIFEST_DIR") {
         let mut path = path::PathBuf::from(manifest_dir);
@@ -98,6 +100,7 @@ struct SaveThePinkSkin {
     spaceship_hp: f32,
     next_overpop_warning: f32,
     next_overpop_warning_enabled: bool,
+    next_shooting_time: f32,
     stars: Vec<GameObject>,
 }
 
@@ -192,6 +195,7 @@ struct RenderCoords {
 struct Controls {
     left_right: Option<Direction>,
     up_down: Option<Direction>,
+    shooting: bool,
 }
 
 impl SaveThePinkSkin {
@@ -253,6 +257,7 @@ impl SaveThePinkSkin {
             victory_progress: 0.0,
             next_overpop_warning: 0.0,
             next_overpop_warning_enabled: true,
+            next_shooting_time: 0.0,
             stars: Vec::new(),
         };
         game.add_spaceship();
@@ -1027,7 +1032,7 @@ impl EventHandler for SaveThePinkSkin {
     fn update(&mut self, ctx: &mut Context) -> GameResult<()> {
         const TARGET_FPS: u32 = 60;
 
-        let time: f32 = ggez::timer::time_since_start(&ctx).as_secs() as f32;
+        let time: f32 = ggez::timer::time_since_start(&ctx).as_millis() as f32 / 1000.0;
 
         if let Some(next_meteor_spawn) = self.next_meteor_spawn {
             while time > self.next_meteor_spawn.unwrap() {
@@ -1066,6 +1071,12 @@ impl EventHandler for SaveThePinkSkin {
                 spaceship_tr.acc_y = na::clamp(spaceship_tr.acc_y, -MAX_ACC_Y, MAX_ACC_Y);
                 spaceship_tr.vel_x = na::clamp(spaceship_tr.vel_x, -MAX_SPEED_X, MAX_SPEED_X);
                 spaceship_tr.vel_y = na::clamp(spaceship_tr.vel_y, -MAX_SPEED_Y, MAX_SPEED_Y);
+
+                if controls.shooting && self.next_shooting_time < time {
+                    let mouse_pos = ggez::input::mouse::position(ctx);
+                    self.shoot(mouse_pos.x / SCREEN_SIZE_X, mouse_pos.y / SCREEN_SIZE_Y);
+                    self.next_shooting_time = time + SHOOTING_SPEED;
+                }
             }
 
             for object in &mut self.objects.values_mut() {
@@ -1375,7 +1386,14 @@ impl EventHandler for SaveThePinkSkin {
 
     fn mouse_button_down_event(&mut self, _ctx: &mut Context, button: MouseButton, x: f32, y: f32) {
         if button == MouseButton::Left {
-            self.shoot(x / SCREEN_SIZE_X, y / SCREEN_SIZE_Y);
+            self.controls.shooting = true;
+            self.next_shooting_time = 0.0;
+        }
+    }
+
+    fn mouse_button_up_event(&mut self, _ctx: &mut Context, button: MouseButton, _x: f32, _y: f32) {
+        if button == MouseButton::Left {
+            self.controls.shooting = false;
         }
     }
 }

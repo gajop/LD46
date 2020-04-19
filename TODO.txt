@@ -20,7 +20,7 @@ Extra:
 
 Polish:
 - Stars: DONE
-- Hold to shoot
+- Hold to shoot: DONE
 - Planet: atmosphere
 - Planet clouds
 - Bigger screen?
