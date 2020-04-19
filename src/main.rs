@@ -1137,11 +1137,11 @@ fn get_decay_size_factor(radius: f32) -> f32 {
 
 impl EventHandler for SaveThePinkSkin {
     fn update(&mut self, ctx: &mut Context) -> GameResult<()> {
+        const TARGET_FPS: u32 = 60;
         if !self.started {
+            while ggez::timer::check_update_time(ctx, TARGET_FPS) {}
             return Ok(());
         }
-
-        const TARGET_FPS: u32 = 60;
 
         let time: f32 = ggez::timer::time_since_start(&ctx).as_millis() as f32 / 1000.0;
 
